@@ -43,6 +43,10 @@ final class AppState: ObservableObject {
     let ports = PortMonitor()
     /// The last failed command in each pane, for "Ask Claude".
     @Published private(set) var failures: [UUID: CommandFailure] = [:]
+    /// A failure arrives in two halves, in either order: the output read back from the terminal
+    /// and the shell's end event over the socket. It shows once both are in.
+    private var capturedOutput: [UUID: CapturedFailure] = [:]
+    private var failedCommand: [UUID: (command: String, cwd: String)] = [:]
     @Published var historyVisible = false
     /// What each pane's agent changed in its last turn.
     @Published private(set) var turnChanges: [UUID: TurnChange] = [:]
@@ -88,6 +92,7 @@ final class AppState: ObservableObject {
 
         git.onUpdate = { [weak self] id, status in self?.setGit(status, for: id) }
         turns.onChange = { [weak self] id, change in self?.turnFinished(id, change) }
+        terminals.onCommandStart = { [weak self] id in self?.commandStarted(id) }
         terminals.onFailure = { [weak self] id, failure in self?.commandFailed(id, failure) }
         ports.shells = { [weak self] in self?.terminals.shellPIDs ?? [:] }
         ports.shouldScan = { [weak self] in
@@ -520,7 +525,11 @@ final class AppState: ObservableObject {
         if let event, event.source == "shell", event.event == "start", let command = event.cmd {
             ports.scan(after: 1.5)
             history.record(command, cwd: old.cwd)
-            if failures[paneID] != nil { withAnimation { failures[paneID] = nil } }
+        }
+        if let event, event.source == "shell", event.event == "end", case .failed = new.status,
+           let command = new.command, CommandInfo.agent(command) == nil {
+            failedCommand[paneID] = (command, new.cwd)
+            showFailure(paneID)
         }
         if let event, Self.touchesFiles(event) { git.refresh(paneID, cwd: new.cwd) }
         if let event, event.tokens != nil, let agent = new.agent ?? AgentKind(rawValue: event.source) {
@@ -582,10 +591,24 @@ final class AppState: ObservableObject {
 
     // MARK: Failed commands
 
+    /// The terminal's own start mark, not the socket's start event: the socket can lag behind
+    /// the terminal and would clear the failure of a command that already finished.
+    private func commandStarted(_ paneID: UUID) {
+        capturedOutput[paneID] = nil
+        failedCommand[paneID] = nil
+        if failures[paneID] != nil { withAnimation { failures[paneID] = nil } }
+    }
+
     private func commandFailed(_ paneID: UUID, _ captured: CapturedFailure) {
-        guard let runtime = runtimes[paneID], let command = runtime.command,
-              CommandInfo.agent(command) == nil else { return }
-        let failure = CommandFailure(command: command, cwd: runtime.cwd, code: captured.code, output: captured.output)
+        capturedOutput[paneID] = captured
+        showFailure(paneID)
+    }
+
+    private func showFailure(_ paneID: UUID) {
+        guard let captured = capturedOutput[paneID], let ended = failedCommand[paneID] else { return }
+        capturedOutput[paneID] = nil
+        failedCommand[paneID] = nil
+        let failure = CommandFailure(command: ended.command, cwd: ended.cwd, code: captured.code, output: captured.output)
         withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) { failures[paneID] = failure }
     }
 

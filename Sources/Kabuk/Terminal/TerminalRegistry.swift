@@ -31,6 +31,7 @@ final class TerminalRegistry: NSObject, LocalProcessTerminalViewDelegate {
     private var closed: Set<UUID> = []
     var onSubmit: ((UUID) -> Void)?
     var onExit: ((UUID) -> Void)?
+    var onCommandStart: ((UUID) -> Void)?
     var onFailure: ((UUID, CapturedFailure) -> Void)?
     private var captures: [UUID: OutputCapture] = [:]
     /// SwiftTerm keeps 500 lines by default; a terminal you live in needs more.
@@ -53,9 +54,11 @@ final class TerminalRegistry: NSObject, LocalProcessTerminalViewDelegate {
         view.onSubmit = { [weak self] in self?.onSubmit?($0) }
         views[paneID] = view
         view.changeScrollback(Self.scrollback)
-        captures[paneID] = OutputCapture(view: view) { [weak self] failure in
+        captures[paneID] = OutputCapture(view: view, onStart: { [weak self] in
+            self?.onCommandStart?(paneID)
+        }, onFailure: { [weak self] failure in
             self?.onFailure?(paneID, failure)
-        }
+        })
 
         let shell = ShellIntegration.userShell
         let directory = FileManager.default.fileExists(atPath: cwd) ? cwd : NSHomeDirectory()

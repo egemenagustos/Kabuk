@@ -24,21 +24,26 @@ final class OutputCapture: @unchecked Sendable {
     private let lock = NSLock()
     private var startRow: Int?
 
+    /// `onStart` comes from the same stream as the end mark, so it never arrives after it.
     @MainActor
-    init(view: LocalProcessTerminalView, onFailure: @escaping @MainActor (CapturedFailure) -> Void) {
+    init(view: LocalProcessTerminalView, onStart: @escaping @MainActor () -> Void,
+         onFailure: @escaping @MainActor (CapturedFailure) -> Void) {
         self.view = view
         observation = view.observeOscEvents { [weak self] event in
             guard event.code == Self.oscCode, let self else { return }
-            self.handle(String(decoding: event.payload, as: UTF8.self), cursorRow: event.cursor.row, onFailure: onFailure)
+            self.handle(String(decoding: event.payload, as: UTF8.self), cursorRow: event.cursor.row,
+                        onStart: onStart, onFailure: onFailure)
         }
     }
 
-    private func handle(_ mark: String, cursorRow: Int, onFailure: @escaping @MainActor (CapturedFailure) -> Void) {
+    private func handle(_ mark: String, cursorRow: Int, onStart: @escaping @MainActor () -> Void,
+                        onFailure: @escaping @MainActor (CapturedFailure) -> Void) {
         guard let view else { return }
         let lines = Self.lines(view.getBufferAsData())
         let row = max(lines.count - view.terminalDimensions.rows + cursorRow, 0)
         if mark == "C" {
             lock.withLock { startRow = row }
+            DispatchQueue.main.async { onStart() }
             return
         }
         guard mark.hasPrefix("D") else { return }
