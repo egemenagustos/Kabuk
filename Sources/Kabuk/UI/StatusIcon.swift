@@ -50,68 +50,30 @@ struct StatusIcon: View {
 /// Ordinary commands: three bars rising and falling out of step, like a level meter.
 private struct RunningBars: View {
     var body: some View {
-        TimelineView(.animation) { context in
-            let t = context.date.timeIntervalSinceReferenceDate
-            GeometryReader { geo in
-                HStack(alignment: .center, spacing: geo.size.width * 0.14) {
-                    ForEach(0..<3, id: \.self) { i in
-                        let phase = t * 6 + Double(i) * 1.1
-                        Capsule()
-                            .fill(Theme.running.opacity(0.75 + 0.25 * sin(phase)))
-                            .frame(width: geo.size.width * 0.2,
-                                   height: geo.size.height * (0.3 + 0.6 * (0.5 + 0.5 * sin(phase))))
-                    }
-                }
-                .frame(width: geo.size.width, height: geo.size.height)
-            }
-            .padding(1)
-        }
+        RunningBarsLayer(color: Theme.running)
     }
 }
 
-/// Claude/Codex thinking: the asterisk grows through a cycle of glyphs instead of turning,
-/// over a soft halo that breathes with it.
+/// Claude/Codex thinking: the asterisk cycles through glyphs over a breathing halo.
 private struct AgentSpinner: View {
     let color: Color
     let size: CGFloat
 
-    private static let frames = ["·", "✢", "✳", "✶", "✻", "✽", "✻", "✶", "✳", "✢"]
-
     var body: some View {
-        TimelineView(.animation) { context in
-            let t = context.date.timeIntervalSinceReferenceDate
-            let frame = Int(t * 9) % Self.frames.count
-            let glow = 0.5 + 0.5 * sin(t * 2.2)
-            ZStack {
-                Circle()
-                    .fill(color.opacity(0.1 + 0.16 * glow))
-                    .blur(radius: 4)
-                    .scaleEffect(0.75 + 0.45 * glow)
-                Text(Self.frames[frame])
-                    .font(.system(size: size * 1.05, weight: .heavy))
-                    .foregroundStyle(color)
-                    .shadow(color: color.opacity(0.6 * glow), radius: 3)
-            }
-        }
+        // The halo and the glyph's glow reach past the icon's frame.
+        AgentSpinnerLayer(color: color, size: size).bleeding(size)
     }
 }
 
 /// Waiting for the user: a ring that keeps sending out pulses.
 private struct NeedsYouPulse: View {
     var body: some View {
-        TimelineView(.animation) { context in
-            let t = context.date.timeIntervalSinceReferenceDate
-            let phase = t.truncatingRemainder(dividingBy: 1.4) / 1.4
-            ZStack {
-                Circle()
-                    .stroke(Theme.needsYou, lineWidth: 1.5)
-                    .scaleEffect(1 + phase * 0.9)
-                    .opacity(1 - phase)
-                Circle().stroke(Theme.needsYou, lineWidth: 1.8)
-                Circle().fill(Theme.needsYou).padding(4)
-            }
-            .padding(1)
+        ZStack {
+            PulseRingLayer(color: Theme.needsYou, lineWidth: 1.5, bleed: 8).bleeding(8)
+            Circle().stroke(Theme.needsYou, lineWidth: 1.8)
+            Circle().fill(Theme.needsYou).padding(4)
         }
+        .padding(1)
     }
 }
 
@@ -155,23 +117,5 @@ struct ShakeEffect: GeometryEffect {
     func effectValue(size: CGSize) -> ProjectionTransform {
         // Three wiggles per step, back to rest at every whole number.
         ProjectionTransform(CGAffineTransform(translationX: sin(trigger * .pi * 6) * 5, y: 0))
-    }
-}
-
-/// A sweep of light across a row while an agent works.
-struct Shimmer: View {
-    let color: Color
-
-    var body: some View {
-        TimelineView(.animation) { context in
-            let t = context.date.timeIntervalSinceReferenceDate
-            let phase = CGFloat(t.truncatingRemainder(dividingBy: 2.2) / 2.2)
-            GeometryReader { geo in
-                LinearGradient(colors: [.clear, color.opacity(0.16), .clear], startPoint: .leading, endPoint: .trailing)
-                    .frame(width: geo.size.width * 0.5)
-                    .offset(x: -geo.size.width * 0.5 + phase * geo.size.width * 1.5)
-            }
-        }
-        .allowsHitTesting(false)
     }
 }

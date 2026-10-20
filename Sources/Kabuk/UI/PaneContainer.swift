@@ -156,22 +156,11 @@ private struct StatusBorder: View {
 
             switch status {
             case .agentWorking(let agent, _):
-                TimelineView(.animation) { context in
-                    let t = context.date.timeIntervalSinceReferenceDate
-                    let color = Theme.color(for: agent)
-                    shape.strokeBorder(
-                        AngularGradient(colors: [color.opacity(0), color, color.opacity(0.2), color.opacity(0)],
-                                        center: .center, angle: .degrees(t * 90)),
-                        lineWidth: 1.6)
-                        .blur(radius: 0.4)
-                }
-                .transition(.opacity)
+                SweepingBorder(color: Theme.color(for: agent))
+                    .transition(.opacity)
             case .agentNeedsYou:
-                TimelineView(.animation) { context in
-                    let t = context.date.timeIntervalSinceReferenceDate
-                    shape.strokeBorder(Theme.needsYou.opacity(0.45 + 0.4 * sin(t * 3.2)), lineWidth: 1.6)
-                }
-                .transition(.opacity)
+                BreathingBorder(color: Theme.needsYou)
+                    .transition(.opacity)
             case .running:
                 shape.strokeBorder(Theme.running.opacity(0.35), lineWidth: 1)
                     .transition(.opacity)

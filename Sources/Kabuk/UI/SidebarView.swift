@@ -153,8 +153,7 @@ private struct SessionRow: View {
                     RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Color.white.opacity(0.05))
                 }
                 if case .agentWorking(let agent, _) = summary.status {
-                    Shimmer(color: Theme.color(for: agent))
-                        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    Shimmer(color: Theme.color(for: agent), cornerRadius: 8)
                 }
             }
         }
