@@ -6,7 +6,7 @@ Kabuk (Turkish for *shell*) is a glassy, dark terminal that knows when Claude Co
 
 ![Kabuk with split panes, four sessions and Claude working](docs/screenshots/hero.jpg)
 
-▶️ **[Watch the 2½-minute demo](../../releases/latest)**: every feature in action, recorded with Kabuk's own demo mode.
+▶️ **[Watch the 2½-minute demo](https://github.com/egemenagustos/Kabuk/releases/latest)**: every feature in action, recorded with Kabuk's own demo mode.
 
 ![macOS 14+](https://img.shields.io/badge/macOS-14%2B-black?logo=apple) ![Xcode 26+](https://img.shields.io/badge/Xcode-26%2B-147EFB?logo=xcode&logoColor=white) ![License: MIT](https://img.shields.io/badge/license-MIT-blue)
 
@@ -103,7 +103,7 @@ Seven built-in themes (Kabuk, Tokyo Night, Dracula, Nord, Gruvbox, Rosé Pine, S
 Kabuk is built from source. It runs on macOS 14 or later. To build it you need Xcode 26 or later, because the macOS 26 SDK provides Liquid Glass. On older systems Kabuk falls back to a regular material.
 
 ```sh
-git clone https://github.com/<you>/Kabuk.git
+git clone https://github.com/egemenagustos/Kabuk.git
 cd Kabuk
 scripts/build-app.sh          # builds build/Kabuk.app
 open build/Kabuk.app
