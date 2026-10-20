@@ -1,0 +1,63 @@
+import Foundation
+
+/// One line of JSON sent to the Kabuk socket by the zsh integration or `kabuk-hook`.
+public struct HookEvent: Codable, Equatable, Sendable {
+    public var pane: String
+    /// `shell`, `claude` or `codex`.
+    public var source: String
+    /// shell: `start`, `end`, `prompt`
+    /// claude: hook event name (`UserPromptSubmit`, `PostToolUse`, `Notification`, `Stop`)
+    /// codex: notify type (`agent-turn-complete`, `approval-requested`)
+    public var event: String
+    public var cmd: String?
+    public var code: Int32?
+    public var cwd: String?
+    public var message: String?
+    public var prompt: String?
+    public var kind: String?
+    public var tokens: TokenUsage?
+    /// Set when the sender waits on the connection for a reply (permission requests).
+    public var request: String?
+    public var tool: String?
+    public var detail: String?
+    /// Claude offered "always allow" rules for this request.
+    public var canAlwaysAllow: Bool?
+    /// The agent's own session id (Claude) or thread id (Codex), for the cost ledger.
+    public var session: String?
+
+    public init(pane: String, source: String, event: String, cmd: String? = nil, code: Int32? = nil,
+                cwd: String? = nil, message: String? = nil, prompt: String? = nil, kind: String? = nil,
+                tokens: TokenUsage? = nil, request: String? = nil, tool: String? = nil, detail: String? = nil,
+                canAlwaysAllow: Bool? = nil, session: String? = nil) {
+        self.pane = pane
+        self.source = source
+        self.event = event
+        self.cmd = cmd
+        self.code = code
+        self.cwd = cwd
+        self.message = message
+        self.prompt = prompt
+        self.kind = kind
+        self.tokens = tokens
+        self.request = request
+        self.tool = tool
+        self.detail = detail
+        self.canAlwaysAllow = canAlwaysAllow
+        self.session = session
+    }
+
+    public static func parse(_ line: Data) -> HookEvent? {
+        try? JSONDecoder().decode(HookEvent.self, from: line)
+    }
+
+    /// Splits a socket payload into events, skipping malformed lines.
+    public static func parseAll(_ data: Data) -> [HookEvent] {
+        data.split(separator: UInt8(ascii: "\n")).compactMap { parse(Data($0)) }
+    }
+
+    public func encodedLine() -> Data {
+        var data = (try? JSONEncoder().encode(self)) ?? Data()
+        data.append(UInt8(ascii: "\n"))
+        return data
+    }
+}

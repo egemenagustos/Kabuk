@@ -1,0 +1,105 @@
+#!/bin/zsh
+# A stand-in for Codex in the Kabuk demo: scripted turns, a rollout file under $CODEX_HOME
+# for the token count, and the same notify call the real one makes.
+source ${0:A:h}/_demo-lib.zsh
+
+teal=80
+thread=$(uuidgen | tr A-Z a-z)
+rollout=$CODEX_HOME/sessions/$(date +%Y/%m/%d)/rollout-$(date +%Y-%m-%dT%H-%M-%S)-$thread.jsonl
+mkdir -p ${rollout:h}
+print -r -- '{"type":"turn_context","payload":{"model":"gpt-5.5-codex"}}' > $rollout
+total_in=0 total_cached=0 total_out=0
+
+step() { print -r -- $'\e[38;5;'$teal$'m•\e[0m '"$*"; sleep 0.5 }
+detail() { dim "  └ $*"; sleep 0.25 }
+
+plan_checkout() {
+  step "Explored"
+  detail "Read Checkout.tsx, cart.ts"
+  think 1.6 Working $teal
+  step $'Edited \e[1msrc/checkout/validate.ts\e[0m \e[38;5;114m(+18)\e[0m'
+  mkdir -p src/checkout
+  cat > src/checkout/validate.ts <<'EOF'
+export type CheckoutForm = { email: string; card: string; zip: string };
+export type Errors = Partial<Record<keyof CheckoutForm, string>>;
+
+const rules: Record<keyof CheckoutForm, (v: string) => string | undefined> = {
+  email: (v) => (/^\S+@\S+\.\S+$/.test(v) ? undefined : "Enter a valid email"),
+  card: (v) => (v.replace(/\s/g, "").length === 16 ? undefined : "Card number has 16 digits"),
+  zip: (v) => (/^\d{5}$/.test(v) ? undefined : "ZIP is 5 digits"),
+};
+
+export function validate(form: CheckoutForm): Errors {
+  const errors: Errors = {};
+  for (const key of Object.keys(rules) as (keyof CheckoutForm)[]) {
+    const message = rules[key](form[key]);
+    if (message) errors[key] = message;
+  }
+  return errors;
+}
+EOF
+  step $'Edited \e[1msrc/Checkout.tsx\e[0m \e[38;5;114m(+6\e[0m \e[38;5;203m-11)\e[0m'
+  cat > src/Checkout.tsx <<'EOF'
+import { useState } from "react";
+import { validate, type CheckoutForm, type Errors } from "./checkout/validate";
+
+export function Checkout() {
+  const [form, setForm] = useState<CheckoutForm>({ email: "", card: "", zip: "" });
+  const [errors, setErrors] = useState<Errors>({});
+
+  function submit() {
+    const found = validate(form);
+    setErrors(found);
+    if (Object.keys(found).length === 0) console.log("paying", form);
+  }
+
+  return (
+    <form onSubmit={(e) => (e.preventDefault(), submit())}>
+      {(["email", "card", "zip"] as const).map((field) => (
+        <label key={field}>
+          {field}
+          <input value={form[field]} onChange={(e) => setForm({ ...form, [field]: e.target.value })} />
+          {errors[field] && <span className="error">{errors[field]}</span>}
+        </label>
+      ))}
+      <button>Pay</button>
+    </form>
+  );
+}
+EOF
+  print
+  stream "Moved the checkout rules into src/checkout/validate.ts so they can be tested on their own; the form now shows one message per field."
+}
+
+plan_other() {
+  think 1.4 Working $teal
+  step $'Edited \e[1mREADME.md\e[0m \e[38;5;114m(+1)\e[0m'
+  print -r -- "- $1" >> README.md
+  stream "Done."
+}
+
+turn() {
+  local prompt=$1 started=$EPOCHREALTIME
+  print
+  case ${prompt:l} in
+    *checkout*|*valid*) plan_checkout ;;
+    *) plan_other "$prompt" ;;
+  esac
+  (( total_in += 21000 + RANDOM % 6000, total_cached += 15000 + RANDOM % 4000, total_out += 1200 + RANDOM % 900 ))
+  print -r -- "{\"type\":\"event_msg\",\"payload\":{\"type\":\"token_count\",\"info\":{\"total_token_usage\":{\"input_tokens\":$total_in,\"cached_input_tokens\":$total_cached,\"output_tokens\":$total_out},\"last_token_usage\":{\"input_tokens\":$total_in,\"output_tokens\":$total_out}}}}" >> $rollout
+  dim "─ Worked for $(( int(EPOCHREALTIME - started) ))s ─"
+  print
+  _json "$prompt"
+  $KABUK_HOOK codex "{\"type\":\"agent-turn-complete\",\"thread-id\":\"$thread\",\"input-messages\":[$REPLY],\"last-assistant-message\":\"Done.\"}" > /dev/null 2>&1
+}
+
+print -r -- $'\e[38;5;'$teal$'m>_\e[0m \e[1mOpenAI Codex\e[0m \e[38;5;245m· demo agent · gpt-5.5-codex\e[0m'
+dim "   ${PWD/#$HOME/~}"
+print
+while true; do
+  print -n $'\e[38;5;'$teal$'m›\e[0m '
+  read -r line || exit 0
+  [[ -z $line ]] && continue
+  [[ $line == /exit ]] && exit 0
+  turn "$line"
+done

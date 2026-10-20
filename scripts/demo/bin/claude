@@ -1,0 +1,277 @@
+#!/bin/zsh
+# A stand-in for Claude Code in the Kabuk demo: same hooks, scripted turns, no API calls.
+#   claude            waits for prompts
+#   claude "<prompt>" starts with that prompt
+source ${0:A:h}/_demo-lib.zsh
+
+orange=208
+sid=$(uuidgen | tr A-Z a-z)
+mkdir -p $KABUK_DEMO_DATA/transcripts
+transcript=$KABUK_DEMO_DATA/transcripts/$sid.jsonl
+: > $transcript
+turns=0
+
+hook() { $KABUK_HOOK claude $1 <<< "$2" > /dev/null 2>&1 }
+
+payload() {
+  _json "$1"; local prompt=$REPLY
+  _json "$PWD"; local cwd=$REPLY
+  _json "$transcript"; local path=$REPLY
+  REPLY="{\"prompt\":$prompt,\"session_id\":\"$sid\",\"cwd\":$cwd,\"transcript_path\":$path}"
+}
+
+tool() {
+  print -r -- $'\e[38;5;'$orange$'m⏺\e[0m \e[1m'"$1"$'\e[0m('"$2"')'
+  sleep ${3:-0.5}
+  hook PostToolUse "{\"tool_name\":\"$1\",\"session_id\":\"$sid\"}"
+}
+result() { dim "  ⎿  $*"; sleep 0.3 }
+say() { printf '\e[38;5;255m⏺\e[0m '; stream "$*" }
+
+# Bash that needs permission: answered from Kabuk's sidebar when this pane isn't on screen.
+permission() {
+  local command=$1
+  _json "$command"; local quoted=$REPLY
+  print -r -- $'\e[38;5;'$orange$'m⏺\e[0m \e[1mBash\e[0m('"$command"')'
+  dim "  ⎿  Waiting for permission…"
+  local answer=$($KABUK_HOOK claude PermissionRequest <<< "{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":$quoted},\"permission_suggestions\":[{\"type\":\"addRules\",\"rules\":[{\"toolName\":\"Bash\",\"ruleContent\":\"npm install:*\"}],\"behavior\":\"allow\",\"destination\":\"localSettings\"}],\"session_id\":\"$sid\"}" 2> /dev/null)
+  printf '\e[1A\e[K'
+  if [[ $answer == *allow* ]]; then
+    print -r -- $'  \e[38;5;114m⎿  Allowed from Kabuk\e[0m'
+  else
+    print -r -- $'  \e[38;5;114m⎿  Allowed\e[0m'
+  fi
+  sleep 0.4
+}
+
+usage() {
+  local n=$1 i read=$(( 18000 + turns * 14000 ))
+  for i in {1..$n}; do
+    local written=$(( 2400 + RANDOM % 3000 ))
+    print -r -- "{\"type\":\"assistant\",\"message\":{\"id\":\"msg_${sid[1,8]}_${turns}_$i\",\"model\":\"claude-opus-5-5\",\"usage\":{\"input_tokens\":6,\"cache_creation_input_tokens\":$written,\"cache_read_input_tokens\":$(( read + i * 2600 )),\"output_tokens\":$(( 380 + RANDOM % 700 )),\"cache_creation\":{\"ephemeral_5m_input_tokens\":$written,\"ephemeral_1h_input_tokens\":0}}}}" >> $transcript
+  done
+}
+
+plan_dark() {
+  tool Read src/theme.ts
+  result "Read 14 lines"
+  think 1.6 Planning $orange
+  tool Update src/theme.ts 0.7
+  cat > src/theme.ts <<'EOF'
+export type Mode = "light" | "dark";
+
+export const palette = {
+  light: { background: "#ffffff", surface: "#f4f4f7", text: "#16161d", accent: "#5b5bd6" },
+  dark: { background: "#0e0e14", surface: "#181822", text: "#ececf1", accent: "#8b8bff" },
+};
+
+export function preferredMode(): Mode {
+  if (typeof window === "undefined") return "light";
+  return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+}
+
+export function applyTheme(mode: Mode) {
+  const colors = palette[mode];
+  for (const [name, value] of Object.entries(colors)) {
+    document.documentElement.style.setProperty(`--${name}`, value);
+  }
+  document.documentElement.dataset.mode = mode;
+}
+EOF
+  result "Updated src/theme.ts with 13 additions and 4 removals"
+  tool Write src/hooks/useTheme.ts 0.6
+  mkdir -p src/hooks
+  cat > src/hooks/useTheme.ts <<'EOF'
+import { useEffect, useState } from "react";
+import { applyTheme, preferredMode, type Mode } from "../theme";
+
+/** The current color mode, following the system until the user picks one. */
+export function useTheme() {
+  const [mode, setMode] = useState<Mode>(() => (localStorage.getItem("mode") as Mode) ?? preferredMode());
+
+  useEffect(() => {
+    applyTheme(mode);
+    localStorage.setItem("mode", mode);
+  }, [mode]);
+
+  return { mode, toggle: () => setMode((m) => (m === "dark" ? "light" : "dark")) };
+}
+EOF
+  result "Wrote 15 lines to src/hooks/useTheme.ts"
+  tool Update src/App.tsx 0.6
+  cat > src/App.tsx <<'EOF'
+import { Cart } from "./cart";
+import { Checkout } from "./Checkout";
+import { useTheme } from "./hooks/useTheme";
+
+export default function App() {
+  const { mode, toggle } = useTheme();
+  return (
+    <main className="app">
+      <header>
+        <h1>Acme</h1>
+        <button onClick={toggle} aria-label="Toggle dark mode">{mode === "dark" ? "☀︎" : "☾"}</button>
+      </header>
+      <Cart />
+      <Checkout />
+    </main>
+  );
+}
+EOF
+  result "Updated src/App.tsx with 6 additions and 1 removal"
+  print
+  say "Dark mode is in. It follows the system setting until you flip the new toggle in the header, and the choice is remembered."
+}
+
+plan_fix() {
+  tool Read src/config.ts
+  result "Read 6 lines"
+  think 1.8 Investigating $orange
+  say "The build reads VITE_API_URL at startup, but .env.production never defines it."
+  tool Update src/config.ts 0.7
+  cat > src/config.ts <<'EOF'
+const apiUrl = import.meta.env.VITE_API_URL ?? (import.meta.env.DEV ? "http://localhost:8787" : undefined);
+
+if (!apiUrl) {
+  throw new Error("VITE_API_URL is not set. Add it to .env.production (see .env.example).");
+}
+
+export const config = {
+  apiUrl,
+  currency: "USD",
+};
+EOF
+  result "Updated src/config.ts with 5 additions and 2 removals"
+  tool Update .env.example 0.5
+  print 'VITE_API_URL=https://api.acme.dev' >> .env.example
+  result "Updated .env.example with 1 addition"
+  print
+  say "Fixed: config.ts now falls back to the local API in dev and explains what's missing otherwise. Add VITE_API_URL to .env.production and run the deploy again."
+}
+
+plan_ratelimit() {
+  tool Read server/routes.ts
+  result "Read 12 lines"
+  think 1.6 Planning $orange
+  permission "npm install express-rate-limit"
+  dim "  ⎿  added 1 package, and audited 214 packages in 2s"
+  tool Write server/rateLimit.ts 0.6
+  cat > server/rateLimit.ts <<'EOF'
+import rateLimit from "express-rate-limit";
+
+/** 100 requests a minute per IP for the public API, 10 for auth. */
+export const apiLimiter = rateLimit({ windowMs: 60_000, limit: 100, standardHeaders: "draft-7", legacyHeaders: false });
+export const authLimiter = rateLimit({ windowMs: 60_000, limit: 10, standardHeaders: "draft-7", legacyHeaders: false });
+EOF
+  result "Wrote 5 lines to server/rateLimit.ts"
+  tool Update server/routes.ts 0.6
+  cat > server/routes.ts <<'EOF'
+import { Router } from "express";
+import { apiLimiter, authLimiter } from "./rateLimit";
+import { listProducts, getProduct } from "./products";
+import { login, logout } from "./auth";
+
+export const routes = Router();
+
+routes.use("/api", apiLimiter);
+routes.get("/api/products", listProducts);
+routes.get("/api/products/:id", getProduct);
+routes.post("/api/login", authLimiter, login);
+routes.post("/api/logout", logout);
+EOF
+  result "Updated server/routes.ts with 4 additions"
+  print
+  say "Rate limiting is on: 100 requests a minute for the API and 10 for login, with standard RateLimit headers."
+}
+
+plan_tests() {
+  tool Read src/cart.ts
+  result "Read 18 lines"
+  think 1.4 Writing $orange
+  tool Write src/cart.test.ts 0.7
+  cat > src/cart.test.ts <<'EOF'
+import { describe, expect, it } from "vitest";
+import { addItem, removeItem, total, type CartState } from "./cart";
+
+const empty: CartState = { items: [] };
+const mug = { id: "mug", name: "Mug", price: 12 };
+
+describe("cart", () => {
+  it("adds a new item with quantity 1", () => {
+    expect(addItem(empty, mug).items).toEqual([{ ...mug, quantity: 1 }]);
+  });
+
+  it("increments the quantity of an item already in the cart", () => {
+    const once = addItem(empty, mug);
+    expect(addItem(once, mug).items[0].quantity).toBe(2);
+  });
+
+  it("removes an item", () => {
+    expect(removeItem(addItem(empty, mug), "mug").items).toEqual([]);
+  });
+
+  it("totals price times quantity", () => {
+    expect(total(addItem(addItem(empty, mug), mug))).toBe(24);
+  });
+});
+EOF
+  result "Wrote 24 lines to src/cart.test.ts"
+  tool Bash "npm test -- cart" 1.2
+  result "✓ src/cart.test.ts (4 tests) 6ms"
+  print
+  say "Added four tests covering add, increment, remove and total. All pass."
+}
+
+plan_other() {
+  tool Read README.md
+  think 1.2 Writing $orange
+  tool Update README.md 0.5
+  print -r -- "- $1" >> README.md
+  result "Updated README.md with 1 addition"
+  print
+  say "Done."
+}
+
+turn() {
+  local prompt=$1
+  (( turns++ ))
+  payload "$prompt"
+  hook UserPromptSubmit "$REPLY"
+  think 2.0 Thinking $orange
+  case ${prompt:l} in
+    *dark*) plan_dark ;;
+    *"help me fix"*|*deploy*) plan_fix ;;
+    *rate*) plan_ratelimit ;;
+    *test*) plan_tests ;;
+    *) plan_other "$prompt" ;;
+  esac
+  usage 4
+  payload "$prompt"
+  hook Stop "$REPLY"
+  print
+}
+
+banner() {
+  print -r -- $'\e[38;5;'$orange$'m✻\e[0m \e[1mClaude Code\e[0m \e[38;5;245m· demo agent · opus 5.5\e[0m'
+  dim "  ${PWD/#$HOME/~}"
+  print
+}
+
+ask() {
+  print -n $'\e[38;5;245m›\e[0m '
+  read -r REPLY || exit 0
+}
+
+banner
+if [[ -n $1 ]]; then
+  lines=(${(f)1})
+  print -r -- $'\e[38;5;245m›\e[0m '"${lines[1]}"$'\e[38;5;245m … (+'$(( ${#lines} - 1 ))$' lines)\e[0m'
+  print
+  turn "$1"
+fi
+while ask; do
+  [[ -z $REPLY ]] && continue
+  [[ $REPLY == /exit ]] && exit 0
+  print
+  turn "$REPLY"
+done

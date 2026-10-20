@@ -1,0 +1,57 @@
+#!/bin/zsh
+# The demo's npm: believable output for test, deploy and dev, nothing installed.
+source ${0:A:h}/_demo-lib.zsh
+
+green=$'\e[38;5;114m' red=$'\e[38;5;203m' gray=$'\e[38;5;245m' cyan=$'\e[38;5;80m' bold=$'\e[1m' off=$'\e[0m'
+
+case "$1 $2" in
+  "test "*|"run test")
+    print -r -- "${gray}> acme-web@1.4.0 test${off}"
+    print -r -- "${gray}> vitest run${off}"
+    print
+    print -r -- " ${bold}RUN${off}  v3.2.4 ${gray}~/KabukDemo/acme-web${off}"
+    print
+    for file count ms in src/cart.test.ts 6 14 src/config.test.ts 3 9 src/checkout.test.ts 8 41 server/routes.test.ts 12 88 server/auth.test.ts 7 63; do
+      sleep 0.6
+      print -r -- " ${green}✓${off} $file ${gray}($count tests) ${ms}ms${off}"
+    done
+    sleep 0.4
+    print
+    print -r -- " ${gray}Test Files${off}  ${green}${bold}5 passed${off} (5)"
+    print -r -- "      ${gray}Tests${off}  ${green}${bold}36 passed${off} (36)"
+    print -r -- "   ${gray}Duration${off}  3.41s"
+    ;;
+  "run deploy")
+    print -r -- "${gray}> acme-web@1.4.0 deploy${off}"
+    print -r -- "${gray}> vite build && wrangler deploy${off}"
+    print
+    print -r -- "${cyan}vite v6.3.5${off} ${green}building for production...${off}"
+    sleep 0.8
+    print -r -- "transforming (142) ${gray}src/Checkout.tsx${off}"
+    sleep 0.7
+    print -r -- "${red}✗${off} Build failed in 1.52s"
+    print -r -- "${red}error during build:${off}"
+    print -r -- "${red}Error: VITE_API_URL is not defined${off}"
+    print -r -- "    at ${gray}src/config.ts:1:42${off}"
+    print -r -- "    at ${gray}src/main.tsx:3:1${off}"
+    exit 1
+    ;;
+  "run dev")
+    print -r -- "${gray}> acme-web@1.4.0 dev${off}"
+    print -r -- "${gray}> vite${off}"
+    print
+    sleep 0.5
+    print -r -- "  ${cyan}${bold}VITE${off} ${cyan}v6.3.5${off}  ready in ${bold}312${off} ms"
+    print
+    print -r -- "  ${green}➜${off}  ${bold}Local${off}:   ${cyan}http://localhost:${bold}5173${off}${cyan}/${off}"
+    print -r -- "  ${gray}➜  Network: use --host to expose${off}"
+    exec python3 -m http.server 5173 --bind 127.0.0.1 > /dev/null 2>&1
+    ;;
+  "install "*)
+    sleep 1.2
+    print -r -- "added 1 package, and audited 214 packages in 1s"
+    ;;
+  *)
+    print -r -- "${gray}(demo npm) nothing to do for: npm $*${off}"
+    ;;
+esac
