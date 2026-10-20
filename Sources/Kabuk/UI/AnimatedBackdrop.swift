@@ -20,18 +20,56 @@ struct AnimatedBackdrop: NSViewRepresentable {
 
     func makeNSView(context: Context) -> NSView {
         guard let renderer = context.coordinator else { return NSView() }
-        let view = MTKView(frame: .zero, device: renderer.device)
+        let view = BackdropView(frame: .zero, device: renderer.device)
         view.colorPixelFormat = .bgra8Unorm
         view.clearColor = MTLClearColor(red: 0, green: 0, blue: 0, alpha: 0)
         view.layer?.isOpaque = false
-        view.preferredFramesPerSecond = 30
         view.delegate = renderer
-        renderer.setTarget(mood: mood, theme: theme)
+        update(view, renderer: renderer)
         return view
     }
 
     func updateNSView(_ view: NSView, context: Context) {
-        context.coordinator?.setTarget(mood: mood, theme: theme)
+        guard let renderer = context.coordinator else { return }
+        update(view, renderer: renderer)
+    }
+
+    private func update(_ view: NSView, renderer: BackdropRenderer) {
+        renderer.setTarget(mood: mood, theme: theme)
+        // Calm light drifts a few points a second and its blobs are soft, so a third of
+        // the frames looks the same and saves battery while Kabuk sits idle.
+        (view as? BackdropView)?.setFrameRate(mood == .calm ? 10 : 30)
+    }
+}
+
+/// Stops drawing entirely while the window is hidden, minimized or fully covered, instead of
+/// waking up every frame only to skip it.
+final class BackdropView: MTKView {
+    private var occlusionObserver: NSObjectProtocol?
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        occlusionObserver.map(NotificationCenter.default.removeObserver)
+        occlusionObserver = nil
+        guard let window else { isPaused = true; return }
+        occlusionObserver = NotificationCenter.default.addObserver(
+            forName: NSWindow.didChangeOcclusionStateNotification, object: window, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.followOcclusion() }
+        }
+        followOcclusion()
+    }
+
+    /// Only touches the view when the rate changes: setting it restarts MTKView's display
+    /// timer, which would undo a pause on every SwiftUI update.
+    func setFrameRate(_ fps: Int) {
+        guard fps != preferredFramesPerSecond else { return }
+        preferredFramesPerSecond = fps
+        followOcclusion()
+    }
+
+    private func followOcclusion() {
+        isPaused = !(window?.occlusionState.contains(.visible) ?? false)
     }
 }
 
