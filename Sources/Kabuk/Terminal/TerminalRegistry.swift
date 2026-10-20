@@ -16,6 +16,17 @@ final class KabukTerminalView: LocalProcessTerminalView {
         fatalError("init(coder:) is not used")
     }
 
+    /// Draw with SwiftTerm's Metal renderer: glyphs come from a GPU atlas and frames are
+    /// prepared off the main thread, where Core Graphics re-typesets every dirty row on it.
+    /// SwiftTerm needs a window before it can bind the Metal surface; if Metal can't start,
+    /// the view keeps drawing with Core Graphics.
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if window != nil, !isUsingMetalRenderer {
+            try? setUseMetal(true)
+        }
+    }
+
     override func send(source: TerminalView, data: ArraySlice<UInt8>) {
         if data.contains(13) { onSubmit?(paneID) }
         super.send(source: source, data: data)

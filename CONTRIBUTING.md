@@ -63,7 +63,7 @@ The full list of commands is at the top of `Sources/Kabuk/DebugHooks.swift`. It 
 - `answer allow|deny|always|ask`, `showdiff [file]`, `failure`, `ask claude|codex`
 - `findquery`, `theme <id>`, `keys`, `key`, `select`, `opacity`, `caption`, `close`
 
-`snapshot` uses `cacheDisplay`, so it can't draw the glass blur or the Metal background. Check those by eye.
+`snapshot` uses `cacheDisplay`, so it can't draw anything Metal or Core Animation puts on screen: the glass blur, the Metal background, the terminal text (SwiftTerm's Metal renderer) and the looping status animations. Check those by eye.
 
 **Keep your own Kabuk safe:** set `KABUK_SUPPORT_DIR=/some/folder` too. The debug copy then gets its own state, socket and history, and the Kabuk you're working in stays untouched.
 
