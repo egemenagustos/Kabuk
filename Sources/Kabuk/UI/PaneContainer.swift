@@ -15,7 +15,7 @@ struct PaneContainer: View {
             header(runtime)
             TerminalPaneView(paneID: pane.id, cwd: pane.cwd,
                              isFocused: isFocused && !state.paletteVisible && !state.themeGalleryVisible && state.findPane == nil
-                                && state.diffRequest == nil && !state.historyVisible)
+                                && state.diffRequest == nil && !state.historyVisible && state.worktreeReview == nil)
                 .padding(.horizontal, 12)
                 .padding(.bottom, 8)
         }

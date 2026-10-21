@@ -176,6 +176,9 @@ private struct SessionRow: View {
         }
         .contextMenu {
             Button("Rename") { state.renamingSession = session.id }
+            if session.worktree != nil {
+                Button("Review & Merge…") { state.reviewWorktree(of: session.id) }
+            }
             Divider()
             Button("Close Session", role: .destructive) { state.closeSession(session.id) }
         }

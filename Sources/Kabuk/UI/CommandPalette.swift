@@ -147,6 +147,10 @@ struct CommandPalette: View {
                 IntegrationUI.uninstall()
             },
         ]
+        if let session = s.selectedSession, let worktree = session.worktree {
+            items.append(Item(id: "review-worktree", title: "Review & Merge Worktree…", subtitle: worktree.branch,
+                              symbol: "arrow.triangle.merge", status: nil) { s.reviewWorktree(of: session.id) })
+        }
         if let pane = s.selectedSession?.focusedPane, let change = s.turnChanges[pane], change.snapshot != nil {
             let undone = s.undoneTurns[pane] != nil
             items.append(Item(id: "undo-turn", title: undone ? "Redo Last Turn" : "Undo Last Turn",

@@ -68,7 +68,7 @@ final class TurnTracker {
         return change.files.isEmpty ? nil : change
     }
 
-    nonisolated private static func untracked(_ top: String) -> [String: Date] {
+    nonisolated static func untracked(_ top: String) -> [String: Date] {
         let list = Shell.git(["ls-files", "--others", "--exclude-standard"], in: top)
         var result: [String: Date] = [:]
         for path in list.stdout.split(separator: "\n").prefix(2000) {

@@ -79,7 +79,7 @@ private struct UndoButton: View {
     }
 }
 
-private struct FileRow: View {
+struct FileRow: View {
     let file: FileChange
     let open: () -> Void
     @State private var hovering = false

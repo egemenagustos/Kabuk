@@ -25,7 +25,8 @@ struct MainView: View {
                 content
             }
 
-            if state.paletteVisible || state.themeGalleryVisible || state.diffRequest != nil || state.historyVisible {
+            if state.paletteVisible || state.themeGalleryVisible || state.diffRequest != nil || state.historyVisible
+                || state.worktreeReview != nil {
                 Color.black.opacity(0.25)
                     .ignoresSafeArea()
                     .onTapGesture {
@@ -35,8 +36,10 @@ struct MainView: View {
                             state.toggleHistory()
                         } else if state.themeGalleryVisible {
                             state.toggleThemeGallery()
-                        } else {
+                        } else if state.diffRequest != nil {
                             withAnimation(.easeOut(duration: 0.2)) { state.diffRequest = nil }
+                        } else {
+                            state.closeWorktreeReview()
                         }
                     }
                     .transition(.opacity)
@@ -44,6 +47,11 @@ struct MainView: View {
             if state.historyVisible {
                 HistorySearchView()
                     .padding(.top, 90)
+                    .transition(.scale(scale: 0.96, anchor: .top).combined(with: .opacity))
+            }
+            if let request = state.worktreeReview {
+                WorktreeReviewSheet(request: request)
+                    .padding(.top, 70)
                     .transition(.scale(scale: 0.96, anchor: .top).combined(with: .opacity))
             }
             if let request = state.diffRequest {

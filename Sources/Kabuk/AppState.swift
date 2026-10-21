@@ -56,6 +56,8 @@ final class AppState: ObservableObject {
     @Published var expandedTurnCards: Set<UUID> = []
     /// The file whose turn diff is on screen.
     @Published var diffRequest: DiffRequest?
+    /// The worktree whose review sheet is open.
+    @Published var worktreeReview: WorktreeReviewRequest?
     /// Notes the user left on diff lines, per agent pane, until they're sent.
     @Published private(set) var reviewComments: [UUID: [DiffComment]] = [:]
     /// Prompts waiting for the pane's agent to finish its turn.
@@ -233,6 +235,8 @@ final class AppState: ObservableObject {
             return
         case .keep:
             removeSession(sessionID)
+        case .review:
+            reviewWorktree(of: sessionID)
         case .remove(let force):
             removeSession(sessionID)
             DispatchQueue.global(qos: .userInitiated).async {
@@ -244,7 +248,7 @@ final class AppState: ObservableObject {
         }
     }
 
-    private enum WorktreeCloseChoice { case remove(force: Bool), keep, cancel }
+    private enum WorktreeCloseChoice { case remove(force: Bool), keep, review, cancel }
 
     private func confirmWorktreeClose(_ worktree: WorktreeInfo) -> WorktreeCloseChoice {
         let dirty = Worktrees.isDirty(worktree)
@@ -255,11 +259,13 @@ final class AppState: ObservableObject {
             : "") + "\(PaneContainer.abbreviate(worktree.path))\nThe branch \(worktree.branch) is kept either way."
         alert.addButton(withTitle: dirty ? "Remove Anyway" : "Remove Worktree")
         alert.addButton(withTitle: "Keep Worktree")
+        alert.addButton(withTitle: "Review & Merge…")
         alert.addButton(withTitle: "Cancel")
         if dirty { alert.alertStyle = .warning }
         switch alert.runModal() {
         case .alertFirstButtonReturn: return .remove(force: dirty)
         case .alertSecondButtonReturn: return .keep
+        case .alertThirdButtonReturn: return .review
         default: return .cancel
         }
     }
@@ -303,7 +309,9 @@ final class AppState: ObservableObject {
     }
 
     private func addWorktreeSession(_ info: WorktreeInfo, agent: AgentKind?) {
-        let projectIndex = projects.firstIndex { $0.path == info.repoRoot } ?? {
+        // Compared with symlinks resolved: a project opened as /tmp/x is git's /private/tmp/x.
+        let repo = URL(fileURLWithPath: info.repoRoot).resolvingSymlinksInPath().path
+        let projectIndex = projects.firstIndex { URL(fileURLWithPath: $0.path).resolvingSymlinksInPath().path == repo } ?? {
             projects.append(Project(name: (info.repoRoot as NSString).lastPathComponent, path: info.repoRoot))
             return projects.count - 1
         }()
@@ -314,6 +322,53 @@ final class AppState: ObservableObject {
             selectedSessionID = session.id
         }
         scheduleSave()
+    }
+
+    // MARK: Worktree review
+
+    func reviewWorktree(of sessionID: UUID) {
+        guard let loc = location(of: sessionID), let info = projects[loc.project].sessions[loc.session].worktree else { return }
+        withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) {
+            worktreeReview = WorktreeReviewRequest(info: info, sessionID: sessionID)
+            paletteVisible = false
+        }
+    }
+
+    func closeWorktreeReview() {
+        withAnimation(.easeOut(duration: 0.2)) { worktreeReview = nil }
+    }
+
+    /// The pane that review notes and PR commands for a worktree go to.
+    func agentPane(of request: WorktreeReviewRequest) -> UUID? {
+        guard let id = request.sessionID, let loc = location(of: id) else { return nil }
+        let session = projects[loc.project].sessions[loc.session]
+        return session.root.panes.first { runtime($0).agent != nil }?.id ?? session.focusedPane
+    }
+
+    /// Pushes the branch and opens a pull request, in a pane where any login prompt can be answered.
+    func openPullRequest(_ request: WorktreeReviewRequest) {
+        let branch = "'" + request.info.branch.replacingOccurrences(of: "'", with: "'\\''") + "'"
+        let command = "git push -u origin \(branch) && gh pr create --fill --head \(branch)"
+        closeWorktreeReview()
+        if let pane = agentPane(of: request) {
+            split(.vertical, from: pane, command: command)
+        } else {
+            newSession(cwd: request.info.path)
+            if let pane = selectedSession?.focusedPane { pendingCommands[pane] = command }
+        }
+    }
+
+    /// After a merge the worktree and its branch have done their job.
+    func discardWorktree(_ request: WorktreeReviewRequest) {
+        closeWorktreeReview()
+        if let id = request.sessionID { removeSession(id) }
+        let info = request.info
+        DispatchQueue.global(qos: .userInitiated).async {
+            let failure = Worktrees.discard(info)
+            DispatchQueue.main.async {
+                if let failure { Self.alert("Couldn't remove the worktree", failure.localizedDescription) }
+            }
+        }
     }
 
     static func alert(_ title: String, _ message: String) {
@@ -986,6 +1041,12 @@ final class AppState: ObservableObject {
         saveWork?.cancel()
         Persistence.save(snapshot)
     }
+}
+
+struct WorktreeReviewRequest: Equatable {
+    var info: WorktreeInfo
+    /// The session working in the worktree, if Kabuk opened it.
+    var sessionID: UUID?
 }
 
 struct DiffRequest: Equatable {
