@@ -137,6 +137,16 @@ routes.post("/api/logout", logout);
 EOF
 git add -A && git commit -qm "Checkout form and API routes"
 
+# Project skills, so the skill picker has something of the project's own to show.
+skill() {
+  mkdir -p .claude/skills/$1
+  print -r -- $'---\nname: '"$1"$'\ndescription: '"$2"$'\n---\n' > .claude/skills/$1/SKILL.md
+}
+skill write-tests "Write Vitest tests for the changed files, matching the style of the tests next to them."
+skill deploy-preview "Build the site and deploy a Cloudflare preview, then reply with its URL."
+skill release-notes "Draft release notes from the commits since the last tag, grouped by area."
+git add -A && git commit -qm "Add project skills"
+
 # Command history from the past week, so ⌘R has something to find.
 now=$(date +%s)
 reference=978307200  # Foundation dates count from 2001-01-01

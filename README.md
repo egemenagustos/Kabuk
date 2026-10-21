@@ -85,6 +85,14 @@ When a command fails, Kabuk has already captured its output. The **Ask Claude** 
 
 ![A failed deploy with the Ask Claude chip](docs/screenshots/failure.jpg)
 
+### Skills at hand
+
+The book button in an agent pane's header lists the skills that agent can load: Claude's from `~/.claude/skills`, the project's `.claude/skills`, enabled plugins and claude.ai, and Codex's from `~/.agents/skills`, `~/.codex/skills`, the project and the built-in ones. Pick one and Kabuk types `/name` (Claude) or `$name` (Codex) at the agent's prompt without sending it, so you can write your request after it. In the palette, start with `/` or `$` to search only skills. Right-click a skill to open its SKILL.md.
+
+![The skill picker open from a Claude pane's header](docs/screenshots/skills.jpg)
+
+![The command palette listing skills after typing /](docs/screenshots/skills-palette.jpg)
+
 ### Dev servers detected
 
 When something started in a pane listens on a TCP port (`npm run dev`, `python -m http.server`, …), a `:5173` chip appears in the pane and the sidebar. Click it to open the page. It disappears when the server stops.
@@ -93,7 +101,7 @@ When something started in a pane listens on a TCP port (`npm run dev`, `python -
 
 ### Command palette
 
-**⌘K** reaches every command: sessions, worktrees, splits, themes, transparency, integrations.
+**⌘K** reaches every command: sessions, worktrees, splits, themes, transparency, integrations, and the focused agent's skills (type `/` or `$`).
 
 ![The command palette filtered to "worktree"](docs/screenshots/palette.jpg)
 

@@ -14,6 +14,8 @@ struct CommandPalette: View {
         let subtitle: String
         let symbol: String
         let status: PaneStatus?
+        /// Set for a skill, which ranks by its own name rather than the title and subtitle.
+        var skill: Skill? = nil
         let run: () -> Void
     }
 
@@ -22,7 +24,7 @@ struct CommandPalette: View {
         VStack(spacing: 0) {
             HStack(spacing: 10) {
                 Image(systemName: "magnifyingglass").foregroundStyle(.white.opacity(0.45))
-                TextField("Search sessions or run a command…", text: $query)
+                TextField("Search sessions, run a command, or type / for skills…", text: $query)
                     .textFieldStyle(.plain)
                     .font(.system(size: 16))
                     .focused($focused)
@@ -63,7 +65,10 @@ struct CommandPalette: View {
         .glass(in: RoundedRectangle(cornerRadius: 16, style: .continuous), tint: .black.opacity(0.35))
         .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Color.white.opacity(0.1)))
         .shadow(color: .black.opacity(0.5), radius: 40, y: 20)
-        .onAppear { focused = true }
+        .onAppear {
+            focused = true
+            if let pane = state.selectedSession?.focusedPane { state.refreshSkills(for: pane) }
+        }
     }
 
     private func row(_ item: Item, active: Bool) -> some View {
@@ -96,10 +101,16 @@ struct CommandPalette: View {
     }
 
     private var filtered: [Item] {
-        let all = sessionItems + actionItems
-        guard !query.isEmpty else { return all }
+        guard !query.isEmpty else { return sessionItems + actionItems }
+        // "/" or "$" asks for skills only, the way Claude and Codex start them.
+        let skillsOnly = query.hasPrefix("/") || query.hasPrefix("$")
+        let search = skillsOnly ? String(query.dropFirst()) : query
+        let all = skillsOnly ? skillItems : sessionItems + actionItems + skillItems
         return all
-            .compactMap { item in FuzzyMatcher.score(query, in: item.title + " " + item.subtitle).map { (item, $0) } }
+            .compactMap { item in
+                let score = item.skill.map { $0.matchScore(search) } ?? FuzzyMatcher.score(search, in: item.title + " " + item.subtitle)
+                return score.map { (item, $0) }
+            }
             .sorted { $0.1 > $1.1 }
             .map(\.0)
     }
@@ -112,6 +123,17 @@ struct CommandPalette: View {
                     state.select(session.id)
                 }
             }
+        }
+    }
+
+    /// The focused agent's skills; choosing one types it at the agent's prompt.
+    private var skillItems: [Item] {
+        guard let pane = state.selectedSession?.focusedPane else { return [] }
+        let s = state
+        return s.skills(for: pane).map { skill in
+            Item(id: "skill-" + skill.id, title: skill.insertion.trimmingCharacters(in: .whitespaces),
+                 subtitle: [skill.scopeLabel, skill.description].filter { !$0.isEmpty }.joined(separator: " · "),
+                 symbol: "book.closed", status: nil, skill: skill) { s.insertSkill(skill, into: pane) }
         }
     }
 

@@ -6,6 +6,10 @@ Changes that are on `main` but not released yet are listed under **Unreleased**.
 
 ## [Unreleased]
 
+### Added
+
+- **Skills.** A button in an agent pane's header lists the skills that agent can load, from the user's, the project's, plugins, claude.ai (Claude) and the built-in ones (Codex). Choosing one types `/name` for Claude or `$name` for Codex at the prompt without sending it, so the request can follow. In the palette, start with `/` or `$` to search only skills. Right-click a skill to open its SKILL.md.
+
 ## [0.4.0] - 2026-10-21
 
 ### Added

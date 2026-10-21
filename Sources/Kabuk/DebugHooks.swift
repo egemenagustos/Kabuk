@@ -20,6 +20,11 @@ import SwiftUI
 ///                               the found update, "quit" quits; every command writes <dir>/update.txt with the update state
 ///   dev.kabuk.failure           writes <dir>/failure.txt: each pane's captured failure and its prompt
 ///   dev.kabuk.ask (object)      asks claude or codex about the first captured failure
+///   dev.kabuk.skills            scans the focused pane's skills and writes them to <dir>/skills.txt
+///   dev.kabuk.insertskill (object) types the focused agent's skill with that invocation at its prompt
+///   dev.kabuk.skillpicker       opens the focused agent pane's skill picker
+///   dev.kabuk.screen            writes <dir>/screen.txt: the focused terminal's visible text, for what
+///                               `snapshot` can't draw
 ///   dev.kabuk.dump              writes <dir>/focus.txt: the focused pane and the first responder
 /// For the demo video:
 ///   dev.kabuk.caption (object)  shows "Title|⌘ K" in the caption strip; empty hides it
@@ -239,6 +244,34 @@ enum DebugHooks {
                 guard let agent = (note.object as? String).flatMap(AgentKind.init(rawValue:)),
                       let pane = state.failures.keys.first else { return }
                 state.askAgent(about: pane, agent: agent)
+            }
+        }
+        center.addObserver(forName: .init("dev.kabuk.skills"), object: nil, queue: .main) { _ in
+            MainActor.assumeIsolated {
+                guard let pane = state.selectedSession?.focusedPane else { return }
+                state.refreshSkills(for: pane)
+                // The scan runs in the background; give it a moment before reading the cache.
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                    let text = state.skills(for: pane).map { "\($0.insertion)\t\($0.scopeLabel)\t\($0.path)" }.joined(separator: "\n")
+                    output("skills.txt", text + "\n")
+                }
+            }
+        }
+        center.addObserver(forName: .init("dev.kabuk.insertskill"), object: nil, queue: .main) { note in
+            MainActor.assumeIsolated {
+                guard let pane = state.selectedSession?.focusedPane, let invocation = note.object as? String,
+                      let skill = state.skills(for: pane).first(where: { $0.invocation == invocation }) else { return }
+                state.insertSkill(skill, into: pane)
+            }
+        }
+        center.addObserver(forName: .init("dev.kabuk.skillpicker"), object: nil, queue: .main) { _ in
+            MainActor.assumeIsolated { state.skillPickerPane = state.selectedSession?.focusedPane }
+        }
+        center.addObserver(forName: .init("dev.kabuk.screen"), object: nil, queue: .main) { _ in
+            MainActor.assumeIsolated {
+                guard let pane = state.selectedSession?.focusedPane, let view = state.terminals.views[pane] else { return }
+                let lines = String(decoding: view.getBufferAsData(), as: UTF8.self).components(separatedBy: "\n")
+                output("screen.txt", lines.suffix(view.terminalDimensions.rows).joined(separator: "\n") + "\n")
             }
         }
         center.addObserver(forName: .init("dev.kabuk.dump"), object: nil, queue: .main) { _ in

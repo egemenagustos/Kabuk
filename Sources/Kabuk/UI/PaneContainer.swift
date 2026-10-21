@@ -16,7 +16,7 @@ struct PaneContainer: View {
             TerminalPaneView(paneID: pane.id, cwd: pane.cwd,
                              isFocused: isFocused && !state.paletteVisible && !state.themeGalleryVisible && state.findPane == nil
                                 && state.diffRequest == nil && !state.historyVisible && state.worktreeReview == nil
-                                && state.subagentDetail == nil && state.updateSheet == nil)
+                                && state.subagentDetail == nil && state.updateSheet == nil && state.skillPickerPane == nil)
                 .padding(.horizontal, 12)
                 .padding(.bottom, 8)
             let children = state.childSessions(of: pane.id)
@@ -95,6 +95,9 @@ struct PaneContainer: View {
             }
             if let worktree {
                 WorktreeChip(worktree: worktree).fixedSize()
+            }
+            if let agent = runtime.agent {
+                SkillsButton(paneID: pane.id, agent: agent)
             }
             TagChip(tag: runtime.tag, agent: runtime.agent)
                 .fixedSize()

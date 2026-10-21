@@ -91,6 +91,10 @@ final class AppState: ObservableObject {
     @Published private(set) var reviewComments: [UUID: [DiffComment]] = [:]
     /// Prompts waiting for the pane's agent to finish its turn.
     @Published private(set) var pendingPrompts: [UUID: String] = [:]
+    /// Skills found per agent and folder, filled in by `refreshSkills`.
+    @Published private(set) var skillCache: [String: [Skill]] = [:]
+    /// The pane whose skill picker is open; its terminal gives up focus meanwhile.
+    @Published var skillPickerPane: UUID?
     /// The demo's caption strip, shown only when Kabuk runs with KABUK_DEMO.
     @Published var demoCaption: DemoCaption?
     static let isDemo = ProcessInfo.processInfo.environment["KABUK_DEMO"] != nil
@@ -666,8 +670,12 @@ final class AppState: ObservableObject {
 
         runtimes[paneID] = new
         lookUpSubagentBranches(paneID, new)
-        // The agent quit; notes queued for it have nobody to go to.
-        if old.agent != nil, new.agent == nil { pendingPrompts[paneID] = nil }
+        // The agent quit; notes queued for it have nobody to go to, and its skill picker's button
+        // is gone without closing the picker.
+        if old.agent != nil, new.agent == nil {
+            pendingPrompts[paneID] = nil
+            if skillPickerPane == paneID { skillPickerPane = nil }
+        }
         if let event, event.source == "shell", event.event == "start", let command = event.cmd {
             ports.scan(after: 1.5)
             history.record(command, cwd: old.cwd)
@@ -1172,6 +1180,41 @@ final class AppState: ObservableObject {
     func typeIntoFocusedPane(_ text: String, run: Bool) {
         guard let pane = selectedSession?.focusedPane, let terminal = terminals.views[pane] else { return }
         terminal.send(source: terminal, data: ArraySlice(Array((text + (run ? "\r" : "")).utf8)))
+    }
+
+    // MARK: Skills
+
+    private static func skillKey(_ agent: AgentKind, _ cwd: String) -> String { "\(agent.rawValue)|\(cwd)" }
+
+    /// The skills the pane's agent can load, as last scanned. Empty when no agent runs there.
+    func skills(for paneID: UUID) -> [Skill] {
+        guard let runtime = runtimes[paneID], let agent = runtime.agent else { return [] }
+        return skillCache[Self.skillKey(agent, runtime.cwd)] ?? []
+    }
+
+    /// Scans the skill folders again in the background. Called when a list of them opens, so it
+    /// shows the last scan at once and any new skill a moment later.
+    func refreshSkills(for paneID: UUID) {
+        guard let runtime = runtimes[paneID], let agent = runtime.agent else { return }
+        let cwd = runtime.cwd
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let found = SkillCatalog.scan(agent: agent, cwd: cwd)
+            DispatchQueue.main.async {
+                guard let self, self.skillCache[Self.skillKey(agent, cwd)] != found else { return }
+                self.skillCache[Self.skillKey(agent, cwd)] = found
+            }
+        }
+    }
+
+    /// Types the skill at the agent's prompt without submitting it, so the user can write their
+    /// request after it. Typed rather than pasted so the agent's own completion menu still works.
+    /// Not while the agent asks something: the keys would answer it.
+    func insertSkill(_ skill: Skill, into paneID: UUID) {
+        guard let runtime = runtimes[paneID], runtime.agent == skill.agent, !runtime.status.needsYou,
+              let session = session(containing: paneID), let terminal = terminals.views[paneID] else { return }
+        select(session.id)
+        paneFocused(paneID)
+        terminal.send(source: terminal, data: ArraySlice(Array(skill.insertion.utf8)))
     }
 
     func toggleAnimatedBackground() {
