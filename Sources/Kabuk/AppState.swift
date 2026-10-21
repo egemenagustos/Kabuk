@@ -566,6 +566,11 @@ final class AppState: ObservableObject {
     // MARK: Events
 
     func handle(_ event: HookEvent, reply: SocketServer.Reply? = nil) {
+        if let limits = event.limits, let agent = AgentKind(rawValue: event.source) {
+            usage.record(limits, agent: agent)
+        }
+        // The status line only carries the plan limits; it says nothing about the pane.
+        if event.event == "StatusLine" { return }
         guard let paneID = UUID(uuidString: event.pane), let session = session(containing: paneID),
               let pane = session.root.panes.first(where: { $0.id == paneID }) else {
             reply?(.permission(.ask))

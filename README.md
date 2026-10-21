@@ -132,6 +132,7 @@ Seven built-in themes (Kabuk, Tokyo Night, Dracula, Nord, Gruvbox, Rosé Pine, S
 - **Split panes**: ⌘D and ⇧⌘D. Drag the gap between panes to resize them.
 - **Git badges** for each pane: branch, ahead/behind, `+added −removed` and untracked files.
 - **Cost tracking**: per session in the sidebar, and today's total in the status bar. Hover for the last seven days.
+- **Plan limits**: how much of the Claude and Codex 5-hour and weekly limits you've used, as dots for the hours and dashes for the days in the status bar. Hover for percentages and reset times.
 - **Notifications and a Dock badge** when an agent finishes or needs you, or a long command ends, while you're looking elsewhere.
 - **Session restore**: sessions, splits and folders come back when you relaunch.
 - **10,000 lines of scrollback** per pane.
@@ -171,7 +172,7 @@ Kabuk runs your login shell. The zsh integration (status, failed-output capture,
 
 Choose **Kabuk → Install Claude/Codex Integration…**, or press ⌘K and type "integration".
 
-- **Claude Code** gets `UserPromptSubmit`, `PreToolUse` (only for starting subagents), `PostToolUse`, `Notification`, `Stop`, `PermissionRequest`, `SubagentStart` and `SubagentStop` hooks in `~/.claude/settings.json`, and the `kabuk-delegate` skill in `~/.claude/skills`. When a newer Kabuk needs more hooks, it offers to update them.
+- **Claude Code** gets `UserPromptSubmit`, `PreToolUse` (only for starting subagents), `PostToolUse`, `Notification`, `Stop`, `PermissionRequest`, `SubagentStart` and `SubagentStop` hooks in `~/.claude/settings.json`, a status line command that passes your plan limits to Kabuk (it still runs your own status line, if you have one), and the `kabuk-delegate` skill in `~/.claude/skills`. When a newer Kabuk needs more hooks, it offers to update them.
 - **Codex** gets a `notify` line in `~/.codex/config.toml`.
 
 The first install backs up both files as `*.kabuk-backup`. The hooks only do something inside Kabuk panes. In any other terminal they exit immediately. The same menu removes them.
@@ -241,6 +242,7 @@ Everything lives in `~/Library/Application Support/Kabuk/`:
 | `state.json` | Sessions, splits, folders and settings |
 | `history.jsonl` | Commands run in Kabuk, with their folders |
 | `usage.json` | The cost ledger |
+| `limits.json` | The latest Claude and Codex plan limits |
 | `pricing.json` | Optional price overrides |
 | `themes/` | Your themes |
 | `shell/` | The zsh integration, rewritten at launch |
@@ -298,9 +300,10 @@ The only network request Kabuk makes is the daily update check: it asks `api.git
 Everything Kabuk records stays in `~/Library/Application Support/Kabuk/`:
 - commands and their folders
 - token counts and costs
+- how much of your plan limits you've used
 - your sessions
 
-Token counts come from the agents' own transcript files on your disk.
+Token counts and plan limits come from the agents' own files on your disk and from Claude Code's status line.
 
 ## License
 

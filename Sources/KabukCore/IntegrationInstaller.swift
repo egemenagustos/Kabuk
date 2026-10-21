@@ -50,6 +50,10 @@ public enum IntegrationInstaller {
             hooks[event] = groups
         }
         settings["hooks"] = hooks
+        var statusLine = settings["statusLine"] as? [String: Any] ?? [:]
+        statusLine["type"] = "command"
+        statusLine["command"] = statusLineCommand(wrapping: userStatusLine(statusLine["command"] as? String))
+        settings["statusLine"] = statusLine
         try writeClaudeSettings(settings)
         try FileManager.default.createDirectory(at: claudeSkill.deletingLastPathComponent(), withIntermediateDirectories: true)
         try skillText.write(to: claudeSkill, atomically: true, encoding: .utf8)
@@ -61,10 +65,23 @@ public enum IntegrationInstaller {
             try? FileManager.default.removeItem(at: claudeSkill.deletingLastPathComponent())
         }
         var settings = try readClaudeSettings()
-        guard let hooks = settings["hooks"] as? [String: Any] else { return }
-        let cleaned = removingKabuk(from: hooks)
-        settings["hooks"] = cleaned.isEmpty ? nil : cleaned
-        try writeClaudeSettings(settings)
+        var changed = false
+        if var statusLine = settings["statusLine"] as? [String: Any], let command = statusLine["command"] as? String,
+           command.hasPrefix(statusLinePrefix) {
+            if let user = userStatusLine(command) {
+                statusLine["command"] = user
+                settings["statusLine"] = statusLine
+            } else {
+                settings["statusLine"] = nil
+            }
+            changed = true
+        }
+        if let hooks = settings["hooks"] as? [String: Any] {
+            let cleaned = removingKabuk(from: hooks)
+            settings["hooks"] = cleaned.isEmpty ? nil : cleaned
+            changed = true
+        }
+        if changed { try writeClaudeSettings(settings) }
     }
 
     public static func claudeInstalled() -> Bool {
@@ -78,7 +95,30 @@ public enum IntegrationInstaller {
             return false
         }
         let skill = (try? String(contentsOf: claudeSkill, encoding: .utf8)) ?? ""
-        return skill != skillText || claudeEvents.contains { event in !(hooks[event] as? [[String: Any]] ?? []).contains(where: isKabukGroup) }
+        let statusLine = (settings["statusLine"] as? [String: Any])?["command"] as? String ?? ""
+        return skill != skillText || !statusLine.hasPrefix(statusLinePrefix) || claudeEvents.contains { event in !(hooks[event] as? [[String: Any]] ?? []).contains(where: isKabukGroup) }
+    }
+
+    /// Claude's status line JSON carries the plan's rate limits; Kabuk's status line passes it to
+    /// `kabuk-hook`, then to the user's own status line command, if there was one, for the text.
+    static let statusLinePrefix = #"input=$(cat); [ -z "$KABUK_HOOK" ] || printf '%s' "$input" | "$KABUK_HOOK" claude StatusLine"#
+    private static let statusLineUserOpen = #"; printf '%s' "$input" | {"# + "\n"
+    private static let statusLineUserClose = "\n}"
+
+    public static func statusLineCommand(wrapping user: String?) -> String {
+        guard let user, !user.isEmpty else { return statusLinePrefix }
+        // The braces keep a compound command (`a; b`, `a && b`) reading the same input.
+        return statusLinePrefix + statusLineUserOpen + user + statusLineUserClose
+    }
+
+    /// The user's own status line command: the one Kabuk wrapped, or the one that's there.
+    static func userStatusLine(_ command: String?) -> String? {
+        guard let command, !command.isEmpty else { return nil }
+        guard command.hasPrefix(statusLinePrefix) else { return command }
+        let rest = command.dropFirst(statusLinePrefix.count)
+        guard rest.hasPrefix(statusLineUserOpen), rest.hasSuffix(statusLineUserClose) else { return nil }
+        let user = String(rest.dropFirst(statusLineUserOpen.count).dropLast(statusLineUserClose.count))
+        return user.isEmpty ? nil : user
     }
 
     public static let skillText = """

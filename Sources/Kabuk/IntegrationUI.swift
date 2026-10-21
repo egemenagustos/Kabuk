@@ -22,14 +22,15 @@ enum IntegrationUI {
         alert("Agent Integration", lines.joined(separator: "\n"))
     }
 
-    /// Hooks installed by an older Kabuk miss newer events (subagents). Asks once per set of events.
+    /// An integration installed by an older Kabuk misses newer events (subagents) or the status
+    /// line (plan limits). Asks once per set of them.
     static func offerUpdateIfOutdated() {
         let key = "declinedIntegrationUpdate"
-        let events = IntegrationInstaller.claudeEvents.joined(separator: ",")
+        let events = (IntegrationInstaller.claudeEvents + ["statusLine"]).joined(separator: ",")
         guard IntegrationInstaller.claudeOutdated(), UserDefaults.standard.string(forKey: key) != events else { return }
         let alert = NSAlert()
         alert.messageText = "Update the Claude Code integration?"
-        alert.informativeText = "This version of Kabuk can show Claude's subagents, give them their own worktrees, and let Claude hand work to Codex. That needs a few more hooks in ~/.claude/settings.json and a skill in ~/.claude/skills."
+        alert.informativeText = "This version of Kabuk can show your Claude plan limits, show Claude's subagents, give them their own worktrees, and let Claude hand work to Codex. That needs a status line command and a few more hooks in ~/.claude/settings.json, and a skill in ~/.claude/skills. Your own status line keeps working."
         alert.addButton(withTitle: "Update")
         alert.addButton(withTitle: "Not Now")
         if alert.runModal() == .alertFirstButtonReturn {

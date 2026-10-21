@@ -77,6 +77,84 @@ final class IntegrationInstallerTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: IntegrationInstaller.claudeSkill.path))
     }
 
+    func testStatusLineWithoutAUserCommand() throws {
+        try IntegrationInstaller.installClaude()
+        var json = try JSONSerialization.jsonObject(with: Data(contentsOf: IntegrationInstaller.claudeSettings)) as! [String: Any]
+        let statusLine = json["statusLine"] as! [String: Any]
+        XCTAssertEqual(statusLine["type"] as? String, "command")
+        XCTAssertEqual(statusLine["command"] as? String, IntegrationInstaller.statusLineCommand(wrapping: nil))
+
+        try IntegrationInstaller.uninstallClaude()
+        json = try JSONSerialization.jsonObject(with: Data(contentsOf: IntegrationInstaller.claudeSettings)) as! [String: Any]
+        XCTAssertNil(json["statusLine"])
+    }
+
+    func testStatusLineWrapsTheUsersOwnAndGivesItBack() throws {
+        let user = #"~/bin/status.sh && echo "$(date)""#
+        let settings: [String: Any] = ["statusLine": ["type": "command", "command": user, "padding": 2]]
+        try JSONSerialization.data(withJSONObject: settings).write(to: IntegrationInstaller.claudeSettings)
+
+        try IntegrationInstaller.installClaude()
+        try IntegrationInstaller.installClaude()
+        var json = try JSONSerialization.jsonObject(with: Data(contentsOf: IntegrationInstaller.claudeSettings)) as! [String: Any]
+        var statusLine = json["statusLine"] as! [String: Any]
+        XCTAssertEqual(statusLine["command"] as? String, IntegrationInstaller.statusLineCommand(wrapping: user),
+                       "wrapped once, however many installs")
+        XCTAssertEqual(statusLine["padding"] as? Int, 2)
+        XCTAssertFalse(IntegrationInstaller.claudeOutdated())
+
+        try IntegrationInstaller.uninstallClaude()
+        json = try JSONSerialization.jsonObject(with: Data(contentsOf: IntegrationInstaller.claudeSettings)) as! [String: Any]
+        statusLine = json["statusLine"] as! [String: Any]
+        XCTAssertEqual(statusLine["command"] as? String, user)
+        XCTAssertEqual(statusLine["padding"] as? Int, 2)
+    }
+
+    func testStatusLineReplacedLaterIsOutdatedAndWrappedAgain() throws {
+        try IntegrationInstaller.installClaude()
+        var json = try JSONSerialization.jsonObject(with: Data(contentsOf: IntegrationInstaller.claudeSettings)) as! [String: Any]
+        json["statusLine"] = ["type": "command", "command": "echo hi"]
+        try JSONSerialization.data(withJSONObject: json).write(to: IntegrationInstaller.claudeSettings)
+        XCTAssertTrue(IntegrationInstaller.claudeOutdated())
+
+        try IntegrationInstaller.installClaude()
+        json = try JSONSerialization.jsonObject(with: Data(contentsOf: IntegrationInstaller.claudeSettings)) as! [String: Any]
+        XCTAssertEqual((json["statusLine"] as! [String: Any])["command"] as? String,
+                       IntegrationInstaller.statusLineCommand(wrapping: "echo hi"))
+    }
+
+    /// Runs the installed command the way Claude does: through sh, JSON on stdin.
+    func testStatusLineCommandRunsTheUsersCommandOnTheSameInput() throws {
+        func run(_ command: String, hook: String?) throws -> String {
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/bin/sh")
+            process.arguments = ["-c", command]
+            var environment = ProcessInfo.processInfo.environment
+            environment["KABUK_HOOK"] = hook
+            process.environment = environment
+            let input = Pipe(), output = Pipe()
+            process.standardInput = input
+            process.standardOutput = output
+            try process.run()
+            input.fileHandleForWriting.write(Data(#"{"model":"opus"}"#.utf8))
+            try input.fileHandleForWriting.close()
+            process.waitUntilExit()
+            return String(decoding: output.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
+        }
+        let hook = dir.appendingPathComponent("hook.sh")
+        let seen = dir.appendingPathComponent("seen")
+        try "#!/bin/sh\ncat > '\(seen.path)'\n".write(to: hook, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: hook.path)
+
+        let command = IntegrationInstaller.statusLineCommand(wrapping: "printf 'A:'; cat")
+        XCTAssertEqual(try run(command, hook: hook.path), #"A:{"model":"opus"}"#)
+        XCTAssertEqual(try String(contentsOf: seen, encoding: .utf8), #"{"model":"opus"}"#)
+
+        try FileManager.default.removeItem(at: seen)
+        XCTAssertEqual(try run(command, hook: nil), #"A:{"model":"opus"}"#, "outside Kabuk only the user's command runs")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: seen.path))
+    }
+
     func testClaudeRefusesBrokenJSON() throws {
         try "{ not json".write(to: IntegrationInstaller.claudeSettings, atomically: true, encoding: .utf8)
         XCTAssertThrowsError(try IntegrationInstaller.installClaude())

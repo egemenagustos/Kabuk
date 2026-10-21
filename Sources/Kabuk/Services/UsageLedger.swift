@@ -6,13 +6,17 @@ import KabukCore
 final class UsageLedger: ObservableObject {
     @Published private(set) var book: UsageBook
     @Published private(set) var pricing: Pricing
+    /// The latest 5-hour and weekly plan usage each agent reported.
+    @Published private(set) var limits: [AgentKind: PlanLimits]
 
     static var bookURL: URL { ShellIntegration.supportDir.appendingPathComponent("usage.json") }
     static var pricingURL: URL { ShellIntegration.supportDir.appendingPathComponent("pricing.json") }
+    static var limitsURL: URL { ShellIntegration.supportDir.appendingPathComponent("limits.json") }
 
     init() {
         book = (try? Data(contentsOf: Self.bookURL)).flatMap { try? JSONDecoder().decode(UsageBook.self, from: $0) } ?? UsageBook()
         pricing = Pricing.load(overrides: Self.pricingURL)
+        limits = (try? Data(contentsOf: Self.limitsURL)).flatMap { try? JSONDecoder().decode([AgentKind: PlanLimits].self, from: $0) } ?? [:]
     }
 
     func reloadPricing() {
@@ -28,6 +32,17 @@ final class UsageLedger: ObservableObject {
         DispatchQueue.global(qos: .utility).async {
             try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
             try? JSONEncoder().encode(book).write(to: url, options: .atomic)
+        }
+    }
+
+    /// Claude's status line reports the same numbers many times a minute; only a change is kept.
+    func record(_ new: PlanLimits, agent: AgentKind) {
+        if let old = limits[agent], old.sameUsage(as: new), new.updatedAt.timeIntervalSince(old.updatedAt) < 60 { return }
+        limits[agent] = new
+        let limits = limits, url = Self.limitsURL, folder = ShellIntegration.supportDir
+        DispatchQueue.global(qos: .utility).async {
+            try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            try? JSONEncoder().encode(limits).write(to: url, options: .atomic)
         }
     }
 

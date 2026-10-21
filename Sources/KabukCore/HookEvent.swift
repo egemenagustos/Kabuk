@@ -6,7 +6,7 @@ public struct HookEvent: Codable, Equatable, Sendable {
     /// `shell`, `claude` or `codex`.
     public var source: String
     /// shell: `start`, `end`, `prompt`
-    /// claude: hook event name (`UserPromptSubmit`, `PostToolUse`, `Notification`, `Stop`)
+    /// claude: hook event name (`UserPromptSubmit`, `PostToolUse`, `Notification`, `Stop`), or `StatusLine`
     /// codex: notify type (`agent-turn-complete`, `approval-requested`)
     public var event: String
     public var cmd: String?
@@ -29,12 +29,14 @@ public struct HookEvent: Codable, Equatable, Sendable {
     public var agentType: String?
     /// The subagent's transcript, on SubagentStart and SubagentStop.
     public var transcript: String?
+    /// The plan's 5-hour and weekly usage: Claude's status line, or a finished Codex turn.
+    public var limits: PlanLimits?
 
     public init(pane: String, source: String, event: String, cmd: String? = nil, code: Int32? = nil,
                 cwd: String? = nil, message: String? = nil, prompt: String? = nil, kind: String? = nil,
                 tokens: TokenUsage? = nil, request: String? = nil, tool: String? = nil, detail: String? = nil,
                 canAlwaysAllow: Bool? = nil, session: String? = nil, agent: String? = nil, agentType: String? = nil,
-                transcript: String? = nil) {
+                transcript: String? = nil, limits: PlanLimits? = nil) {
         self.pane = pane
         self.source = source
         self.event = event
@@ -53,6 +55,7 @@ public struct HookEvent: Codable, Equatable, Sendable {
         self.agent = agent
         self.agentType = agentType
         self.transcript = transcript
+        self.limits = limits
     }
 
     /// The prompt as the user typed it. Claude also submits its own notices, such as

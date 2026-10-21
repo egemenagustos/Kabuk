@@ -97,7 +97,7 @@ struct UpdateSheetView: View {
                     Text(reason).font(.system(size: 11)).foregroundStyle(Theme.failure)
                 default:
                     Text("Claude Code needs a few more hooks").font(.system(size: 12, weight: .semibold)).foregroundStyle(.white)
-                    Text("Subagents, their worktrees and handing work to Codex need new hooks in ~/.claude/settings.json and a skill in ~/.claude/skills.")
+                    Text("Plan limits need a status line command, and subagents, their worktrees and handing work to Codex need new hooks in ~/.claude/settings.json and a skill in ~/.claude/skills.")
                         .font(.system(size: 11)).foregroundStyle(.white.opacity(0.6))
                         .fixedSize(horizontal: false, vertical: true)
                 }

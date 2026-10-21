@@ -1,6 +1,7 @@
 // kabuk-hook: forwards Claude Code hook and Codex notify events to the running Kabuk app.
 //
 //   kabuk-hook claude <HookEventName>   (hook JSON on stdin)
+//   kabuk-hook claude StatusLine        (status line JSON on stdin; forwards the plan limits)
 //   kabuk-hook codex '<notify json>'
 //   kabuk-hook spawn <claude|codex> [--prompt-file <file> | <prompt…>]
 //
@@ -81,7 +82,14 @@ var suggestions: Any?
 var hookOutput: String?
 switch args[1] {
 case "claude":
-    let payload = isatty(STDIN_FILENO) == 0 ? json(FileHandle.standardInput.readDataToEndOfFile()) : [:]
+    let stdin = isatty(STDIN_FILENO) == 0 ? FileHandle.standardInput.readDataToEndOfFile() : Data()
+    if args[2] == "StatusLine" {
+        // Runs on every status line refresh; only the plan limits matter here.
+        guard let limits = PlanLimits.fromClaudeStatusLine(stdin) else { exit(0) }
+        event = HookEvent(pane: pane, source: "claude", event: args[2], limits: limits)
+        break
+    }
+    let payload = json(stdin)
     // Set when a subagent, not the main agent, sent the event.
     let agent = payload["agent_id"] as? String
     let agentType = payload["agent_type"] as? String
@@ -138,15 +146,17 @@ case "codex":
     let inputs = payload["input-messages"] as? [String]
     let type = payload["type"] as? String ?? "unknown"
     var tokens: TokenUsage?
+    var limits: PlanLimits?
     if type == "agent-turn-complete", let rollout = codexRollout(threadID: payload["thread-id"] as? String),
        let data = try? Data(contentsOf: rollout) {
         tokens = TokenUsage.fromCodexRollout(data)
+        limits = PlanLimits.fromCodexRollout(data)
     }
     event = HookEvent(pane: pane, source: "codex", event: type,
                       message: firstLine(payload["last-assistant-message"] as? String),
                       prompt: firstLine(inputs?.last),
                       tokens: tokens,
-                      session: payload["thread-id"] as? String)
+                      session: payload["thread-id"] as? String, limits: limits)
 case "spawn":
     var prompt = args.dropFirst(3).joined(separator: " ")
     if args.count >= 5, args[3] == "--prompt-file" {
