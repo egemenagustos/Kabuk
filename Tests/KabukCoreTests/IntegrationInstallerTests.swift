@@ -9,6 +9,7 @@ final class IntegrationInstallerTests: XCTestCase {
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         IntegrationInstaller.claudeSettings = dir.appendingPathComponent("settings.json")
         IntegrationInstaller.codexConfig = dir.appendingPathComponent("config.toml")
+        IntegrationInstaller.claudeSkill = dir.appendingPathComponent("skills/kabuk-delegate/SKILL.md")
     }
 
     override func tearDownWithError() throws {
@@ -59,6 +60,21 @@ final class IntegrationInstallerTests: XCTestCase {
         XCTAssertTrue(IntegrationInstaller.claudeOutdated())
         try IntegrationInstaller.installClaude()
         XCTAssertFalse(IntegrationInstaller.claudeOutdated())
+    }
+
+    func testDelegateSkillComesAndGoesWithTheHooks() throws {
+        try IntegrationInstaller.installClaude()
+        let skill = try String(contentsOf: IntegrationInstaller.claudeSkill, encoding: .utf8)
+        XCTAssertTrue(skill.hasPrefix("---\nname: kabuk-delegate\n"))
+        XCTAssertTrue(skill.contains("\"$KABUK_HOOK\" spawn codex"))
+        XCTAssertFalse(IntegrationInstaller.claudeOutdated())
+
+        try "edited".write(to: IntegrationInstaller.claudeSkill, atomically: true, encoding: .utf8)
+        XCTAssertTrue(IntegrationInstaller.claudeOutdated(), "a stale or edited skill is reinstalled")
+        try IntegrationInstaller.installClaude()
+
+        try IntegrationInstaller.uninstallClaude()
+        XCTAssertFalse(FileManager.default.fileExists(atPath: IntegrationInstaller.claudeSkill.path))
     }
 
     func testClaudeRefusesBrokenJSON() throws {

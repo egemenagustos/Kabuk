@@ -305,8 +305,10 @@ final class AppState: ObservableObject {
 
     /// Opens a session in a fresh git worktree of the focused pane's repository and, for an
     /// agent, starts it there.
+    /// The new session sits under the one it was started from.
     func newWorktreeSession(agent: AgentKind?) {
-        let cwd = selectedSession.flatMap { s in s.root.panes.first { $0.id == s.focusedPane } }.map { runtime($0).cwd }
+        let parent = selectedSession
+        let cwd = parent.flatMap { s in s.root.panes.first { $0.id == s.focusedPane } }.map { runtime($0).cwd }
             ?? NSHomeDirectory()
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             let result = Worktrees.create(from: cwd, agent: agent)
@@ -315,25 +317,58 @@ final class AppState: ObservableObject {
                 case .failure(let failure):
                     Self.alert("Couldn't create a worktree", failure.localizedDescription)
                 case .success(let info):
-                    self?.addWorktreeSession(info, agent: agent)
+                    self?.addWorktreeSession(info, agent: agent, parent: parent?.id, parentPane: parent?.focusedPane)
                 }
             }
         }
     }
 
-    private func addWorktreeSession(_ info: WorktreeInfo, agent: AgentKind?) {
+    /// `kabuk-hook spawn`: an agent asked for another agent in its own worktree. The session
+    /// appears under the caller's without taking the user away from what they're looking at.
+    private func spawn(_ event: HookEvent, from paneID: UUID, in session: Session, reply: SocketServer.Reply?) {
+        guard let agent = event.kind.flatMap(AgentKind.init(rawValue:)) else {
+            reply?(HookReply(error: "Unknown agent \(event.kind ?? ""); use claude or codex."))
+            return
+        }
+        let cwd = event.cwd ?? runtimes[paneID]?.cwd ?? NSHomeDirectory()
+        let prompt = event.prompt ?? ""
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let result = Worktrees.create(from: cwd, agent: agent)
+            DispatchQueue.main.async {
+                guard let self else { return }
+                switch result {
+                case .failure(let failure):
+                    reply?(HookReply(error: failure.localizedDescription))
+                case .success(let info):
+                    let command = prompt.isEmpty ? agent.rawValue : Self.agentCommand(agent, prompt: prompt, name: "spawn")
+                    // Named after its task; the command line that starts it says nothing.
+                    let task = prompt.split(whereSeparator: \.isNewline).first.map { $0.trimmingCharacters(in: .whitespaces) } ?? ""
+                    let title = task.isEmpty ? nil : (task.count > 42 ? String(task.prefix(40)) + "…" : task)
+                    self.addWorktreeSession(info, agent: agent, command: command, title: title, parent: session.id,
+                                            parentPane: paneID, select: false)
+                    reply?(HookReply(worktree: info.path, branch: info.branch))
+                }
+            }
+        }
+    }
+
+    private func addWorktreeSession(_ info: WorktreeInfo, agent: AgentKind?, command: String? = nil, title: String? = nil,
+                                    parent: UUID? = nil, parentPane: UUID? = nil, select: Bool = true) {
         // Compared with symlinks resolved: a project opened as /tmp/x is git's /private/tmp/x.
         let repo = URL(fileURLWithPath: info.repoRoot).resolvingSymlinksInPath().path
         let projectIndex = projects.firstIndex { URL(fileURLWithPath: $0.path).resolvingSymlinksInPath().path == repo } ?? {
             projects.append(Project(name: (info.repoRoot as NSString).lastPathComponent, path: info.repoRoot))
             return projects.count - 1
         }()
-        let session = Session(title: info.name, cwd: info.path, worktree: info)
-        if let agent { pendingCommands[session.focusedPane] = agent.rawValue }
+        let session = Session(title: title ?? info.name, autoTitle: title == nil, cwd: info.path, worktree: info, parent: parent,
+                              parentPane: parentPane)
+        if let command = command ?? agent?.rawValue { pendingCommands[session.focusedPane] = command }
         withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
             projects[projectIndex].sessions.append(session)
-            selectedSessionID = session.id
+            if select { selectedSessionID = session.id }
         }
+        // Off screen nothing would start its shell; start it now so the agent gets going.
+        if !select { _ = terminals.view(for: session.focusedPane, cwd: info.path) }
         scheduleSave()
     }
 
@@ -514,6 +549,10 @@ final class AppState: ObservableObject {
         guard let paneID = UUID(uuidString: event.pane), let session = session(containing: paneID),
               let pane = session.root.panes.first(where: { $0.id == paneID }) else {
             reply?(.permission(.ask))
+            return
+        }
+        if event.source == "kabuk", event.event == "spawn" {
+            spawn(event, from: paneID, in: session, reply: reply)
             return
         }
         let old = runtime(pane)

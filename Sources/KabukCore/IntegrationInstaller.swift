@@ -7,6 +7,8 @@ import Foundation
 public enum IntegrationInstaller {
     public static var claudeSettings = URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent(".claude/settings.json")
     public static var codexConfig = URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent(".codex/config.toml")
+    /// A skill that tells Claude it can hand work to Codex or another Claude through Kabuk.
+    public static var claudeSkill = URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent(".claude/skills/kabuk-delegate/SKILL.md")
 
     public static let claudeEvents = ["UserPromptSubmit", "PreToolUse", "PostToolUse", "Notification", "Stop", "PermissionRequest",
                                       "SubagentStart", "SubagentStop"]
@@ -49,9 +51,15 @@ public enum IntegrationInstaller {
         }
         settings["hooks"] = hooks
         try writeClaudeSettings(settings)
+        try FileManager.default.createDirectory(at: claudeSkill.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try skillText.write(to: claudeSkill, atomically: true, encoding: .utf8)
     }
 
     public static func uninstallClaude() throws {
+        // Only a skill Kabuk wrote; a user's own file at that path stays.
+        if let text = try? String(contentsOf: claudeSkill, encoding: .utf8), text.contains(marker) {
+            try? FileManager.default.removeItem(at: claudeSkill.deletingLastPathComponent())
+        }
         var settings = try readClaudeSettings()
         guard let hooks = settings["hooks"] as? [String: Any] else { return }
         let cleaned = removingKabuk(from: hooks)
@@ -69,8 +77,36 @@ public enum IntegrationInstaller {
         guard let settings = try? readClaudeSettings(), let hooks = settings["hooks"] as? [String: Any], hasKabuk(hooks) else {
             return false
         }
-        return claudeEvents.contains { event in !(hooks[event] as? [[String: Any]] ?? []).contains(where: isKabukGroup) }
+        let skill = (try? String(contentsOf: claudeSkill, encoding: .utf8)) ?? ""
+        return skill != skillText || claudeEvents.contains { event in !(hooks[event] as? [[String: Any]] ?? []).contains(where: isKabukGroup) }
     }
+
+    public static let skillText = """
+    ---
+    name: kabuk-delegate
+    description: Hand a task to Codex or to another Claude that works in parallel in its own git worktree, in a new Kabuk session. Use only when the KABUK_HOOK environment variable is set (Claude runs inside the Kabuk terminal) and the user asks to give work to Codex, to another agent, or to run something in parallel.
+    ---
+
+    <!-- Written by Kabuk (KABUK_HOOK); removed with Kabuk's integration. -->
+
+    # Delegating through Kabuk
+
+    Kabuk can start another coding agent in a fresh git worktree branched from the current HEAD. It shows up in the sidebar under this session and works on its own, so the user can watch it and you can keep going.
+
+    Write the task to a file, then run:
+
+    ```sh
+    "$KABUK_HOOK" spawn codex --prompt-file /path/to/task.md
+    ```
+
+    Use `claude` instead of `codex` for another Claude. The command prints the new worktree's path and branch.
+
+    - Give the agent everything it needs in the prompt: it doesn't see this conversation.
+    - Commit or stash first if the task depends on changes that aren't committed; the worktree starts from HEAD.
+    - The agent runs on its own. Don't wait for it. Later, look at its work with `git -C <worktree> status`, `log` and `diff`, and tell the user they can merge it from the session's Review & Merge in Kabuk.
+    - If `KABUK_HOOK` isn't set, you're not in Kabuk; say so instead of running the command.
+
+    """
 
     private static func hasKabuk(_ hooks: [String: Any]) -> Bool {
         hooks.values.contains { value in

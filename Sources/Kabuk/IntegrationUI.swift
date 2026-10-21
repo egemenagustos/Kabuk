@@ -8,7 +8,7 @@ enum IntegrationUI {
         var lines: [String] = []
         do {
             try IntegrationInstaller.installClaude()
-            lines.append("✓ Claude Code: hooks added to ~/.claude/settings.json.")
+            lines.append("✓ Claude Code: hooks added to ~/.claude/settings.json, and the kabuk-delegate skill to ~/.claude/skills, so Claude can hand work to Codex in a new worktree.")
         } catch {
             lines.append("✕ Claude Code: \(error.localizedDescription)")
         }
@@ -29,7 +29,7 @@ enum IntegrationUI {
         guard IntegrationInstaller.claudeOutdated(), UserDefaults.standard.string(forKey: key) != events else { return }
         let alert = NSAlert()
         alert.messageText = "Update the Claude Code integration?"
-        alert.informativeText = "This version of Kabuk can show Claude's subagents and give them their own worktrees. That needs a few more hooks in ~/.claude/settings.json."
+        alert.informativeText = "This version of Kabuk can show Claude's subagents, give them their own worktrees, and let Claude hand work to Codex. That needs a few more hooks in ~/.claude/settings.json and a skill in ~/.claude/skills."
         alert.addButton(withTitle: "Update")
         alert.addButton(withTitle: "Not Now")
         if alert.runModal() == .alertFirstButtonReturn {

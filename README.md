@@ -48,6 +48,16 @@ Every session in the sidebar shows what's going on in it: a command running, an 
 
 ![Three agents in worktrees: two Claude, one Codex, each with its own branch](docs/screenshots/parallel-agents.jpg)
 
+### Subagents and spawned agents under their session
+
+When Claude starts subagents, they appear under its session in the sidebar and as chips along the bottom of its pane, each with its task, time, tool count and branch. Click one to follow its steps live. Subagents that can edit files get their own git worktree automatically, so several of them can work at once without overwriting each other. Explore and Plan stay in place. Turn this off with **Turn Off Subagent Worktrees** in the palette.
+
+Claude can also hand a task to Codex, or to another Claude: ask it to, and it runs `"$KABUK_HOOK" spawn codex --prompt-file task.md`. Kabuk starts that agent in a new worktree session under Claude's, without switching away from what you're looking at. Worktree sessions you open with ⌥⌘T sit under the session you opened them from in the same way.
+
+### Review & Merge
+
+A worktree session's **Review & Merge** (context menu, palette, or when you close it) lists the branch's commits and every file it changed against your main checkout's branch. From there you can commit what's left, then merge, squash-merge or open a pull request with `gh`. A merge that hits conflicts is rolled back, so your main checkout is never left half-merged. Afterwards Kabuk can remove the worktree and branch. A subagent's worktree has the same review from its live view.
+
 ### Approve tool use from the sidebar
 
 When Claude asks for permission in a session you aren't looking at, the request waits in the sidebar with **Allow**, **Always** and **Deny**. The notification has Allow and Deny buttons too. If the pane is on screen, or you switch to it, Claude asks in the terminal as usual.
@@ -57,6 +67,10 @@ When Claude asks for permission in a session you aren't looking at, the request 
 ### What changed this turn
 
 When an agent finishes a turn, a card lists the files it changed in that turn, with line counts. Click a file to see the diff. Changes that were already there before the turn aren't counted.
+
+**Undo** puts every file the turn changed back the way it was, untracked files included, and moves the branch back if the agent committed. **Redo** brings the changes back.
+
+Hover a line in the diff to leave a note on it. **Send to Claude** sends all your notes as one prompt, with file, line and code. If the agent is still working, the notes wait until its turn ends.
 
 ![The turn summary card](docs/screenshots/turn-summary.jpg)
 
@@ -126,7 +140,7 @@ Kabuk runs your login shell. The zsh integration (status, failed-output capture,
 
 Choose **Kabuk → Install Claude/Codex Integration…**, or press ⌘K and type "integration".
 
-- **Claude Code** gets `UserPromptSubmit`, `PostToolUse`, `Notification`, `Stop` and `PermissionRequest` hooks in `~/.claude/settings.json`.
+- **Claude Code** gets `UserPromptSubmit`, `PreToolUse` (only for starting subagents), `PostToolUse`, `Notification`, `Stop`, `PermissionRequest`, `SubagentStart` and `SubagentStop` hooks in `~/.claude/settings.json`, and the `kabuk-delegate` skill in `~/.claude/skills`. When a newer Kabuk needs more hooks, it offers to update them.
 - **Codex** gets a `notify` line in `~/.codex/config.toml`.
 
 The first install backs up both files as `*.kabuk-backup`. The hooks only do something inside Kabuk panes. In any other terminal they exit immediately. The same menu removes them.
@@ -200,6 +214,8 @@ Everything lives in `~/Library/Application Support/Kabuk/`:
 | `themes/` | Your themes |
 | `shell/` | The zsh integration, rewritten at launch |
 | `kabuk.sock` | The socket that hooks talk to |
+| `subagent-worktrees-off` | Present while subagent worktrees are turned off |
+| `prompts/` | Prompts handed to agents started by Kabuk |
 
 ## How it works
 

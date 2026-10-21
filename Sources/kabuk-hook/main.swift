@@ -2,6 +2,10 @@
 //
 //   kabuk-hook claude <HookEventName>   (hook JSON on stdin)
 //   kabuk-hook codex '<notify json>'
+//   kabuk-hook spawn <claude|codex> [--prompt-file <file> | <prompt…>]
+//
+// spawn is for agents, not hooks: it asks Kabuk for another agent in a new git worktree,
+// shown under the calling session, and prints the worktree's path and branch.
 //
 // For PermissionRequest it waits for the user's answer in Kabuk and prints Claude's
 // decision JSON; with no answer it prints nothing and Claude asks in the terminal as usual.
@@ -14,7 +18,12 @@ import KabukCore
 let env = ProcessInfo.processInfo.environment
 let args = CommandLine.arguments
 
+let spawning = args.count >= 2 && args[1] == "spawn"
 guard let pane = env["KABUK_PANE_ID"], let socketPath = env["KABUK_SOCKET"], args.count >= 3 else {
+    if spawning {
+        FileHandle.standardError.write(Data("kabuk-hook spawn only works inside a Kabuk pane. Usage: kabuk-hook spawn <claude|codex> [--prompt-file <file> | <prompt…>]\n".utf8))
+        exit(1)
+    }
     exit(0)
 }
 
@@ -138,6 +147,17 @@ case "codex":
                       prompt: firstLine(inputs?.last),
                       tokens: tokens,
                       session: payload["thread-id"] as? String)
+case "spawn":
+    var prompt = args.dropFirst(3).joined(separator: " ")
+    if args.count >= 5, args[3] == "--prompt-file" {
+        guard let text = try? String(contentsOfFile: args[4], encoding: .utf8) else {
+            FileHandle.standardError.write(Data("Can't read \(args[4]).\n".utf8))
+            exit(1)
+        }
+        prompt = text
+    }
+    event = HookEvent(pane: pane, source: "kabuk", event: "spawn", cwd: FileManager.default.currentDirectoryPath,
+                      prompt: prompt, kind: args[2], request: UUID().uuidString)
 default:
     exit(0)
 }
@@ -159,7 +179,10 @@ let connected = withUnsafePointer(to: &addr) {
         connect(fd, $0, socklen_t(MemoryLayout<sockaddr_un>.size))
     }
 }
-guard connected == 0 else { exit(0) }
+guard connected == 0 else {
+    if spawning { FileHandle.standardError.write(Data("Kabuk isn't answering on \(socketPath).\n".utf8)) }
+    exit(spawning ? 1 : 0)
+}
 let line = event.encodedLine()
 _ = line.withUnsafeBytes { write(fd, $0.baseAddress, $0.count) }
 
@@ -175,8 +198,17 @@ if event.request != nil {
         if n <= 0 { break }
         reply.append(contentsOf: buffer[0..<n])
     }
-    let answer = (json(reply)["decision"] as? String).flatMap(PermissionDecision.init(rawValue:)) ?? .ask
-    if let output = PermissionSummary.hookOutput(answer, suggestions: suggestions) {
+    let answer = HookReply.parse(reply)
+    if spawning {
+        guard let worktree = answer?.worktree else {
+            FileHandle.standardError.write(Data("Kabuk couldn't start the agent: \(answer?.error ?? "no answer").\n".utf8))
+            exit(1)
+        }
+        print("Started \(args[2]) in a new Kabuk session, in its own worktree.")
+        print("worktree: \(worktree)")
+        print("branch: \(answer?.branch ?? "")")
+        print("It works on its own; its changes stay in that worktree. Check on them with git -C '\(worktree)' status, log and diff.")
+    } else if let output = PermissionSummary.hookOutput(answer?.decision ?? .ask, suggestions: suggestions) {
         print(output)
     }
 }

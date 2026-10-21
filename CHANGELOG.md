@@ -13,6 +13,8 @@ Changes that are on `main` but not released yet are listed under **Unreleased**.
 - **Review & Merge for worktrees.** See a worktree branch's commits and every changed file against the main checkout's branch, commit what's left, then merge, squash-merge or open a pull request. A merge that hits conflicts is rolled back. Afterwards Kabuk can remove the worktree and branch. Open it from the session's context menu, the palette, or when closing the session.
 - **Subagents under their session.** When Claude starts subagents, they appear under its session in the sidebar and as chips along the bottom of its pane, with their task, time, tool count and worktree branch. Click one for a live view of its steps, and to review and merge its worktree.
 - **Worktrees for editing subagents.** Claude's subagents that can edit files get their own git worktree automatically, so parallel subagents don't overwrite each other. Read-only agents such as Explore and Plan are left alone. Turn it off from the palette.
+- **Claude can hand work to Codex.** The integration adds a `kabuk-delegate` skill: when you ask Claude to give a task to Codex (or another Claude), it runs `"$KABUK_HOOK" spawn codex …`, and Kabuk starts that agent in a new worktree session under Claude's, without switching away from what you're looking at.
+- **Sessions started from a session sit under it.** A worktree session opened with ⌥⌘T, or spawned by an agent, appears under the session it came from in the sidebar and as a chip at the bottom of its pane.
 
 ### Changed
 
