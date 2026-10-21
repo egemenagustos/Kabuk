@@ -69,6 +69,15 @@ final class SubagentTests: XCTestCase {
         XCTAssertTrue(s.subagents.isEmpty)
     }
 
+    func testClaudesOwnNoticesAreNotPrompts() {
+        var s = working()
+        s = StatusReducer.reduce(s, HookEvent(pane: "p", source: "claude", event: "UserPromptSubmit", prompt: "fix the parser"), now: t0)
+        s = StatusReducer.reduce(s, HookEvent(pane: "p", source: "claude", event: "UserPromptSubmit",
+                                              prompt: "<task-notification>\n<task-id>a1</task-id>"), now: t1)
+        XCTAssertEqual(s.lastPrompt, "fix the parser")
+        XCTAssertEqual(s.status, .agentWorking(.claude, since: t1))
+    }
+
     func testOneSubagentDoesNotClearAnothersPermission() {
         var s = working()
         s = StatusReducer.reduce(s, HookEvent(pane: "p", source: "claude", event: "PermissionRequest", request: "r1", tool: "Bash",

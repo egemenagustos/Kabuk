@@ -67,7 +67,7 @@ public enum StatusReducer {
             s.agent = .claude
             s.tag = "claude"
             s.unseen = false
-            if let prompt = event.prompt, !prompt.isEmpty { s.lastPrompt = prompt }
+            if let prompt = event.userPrompt { s.lastPrompt = prompt }
             s.status = .agentWorking(.claude, since: now)
             if s.turnStartedAt == nil { s.turnStartedAt = now }
             // A new turn starts with only the background subagents that are still at it.
@@ -145,7 +145,7 @@ public enum StatusReducer {
             endTurn(&s, now: now)
             s.agent = agent
             s.tag = agent.rawValue
-            if let prompt = event.prompt, !prompt.isEmpty { s.lastPrompt = prompt }
+            if let prompt = event.userPrompt { s.lastPrompt = prompt }
             s.status = .succeeded(finishedAt: now)
 
         case ("codex", "approval-requested"):

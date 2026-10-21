@@ -674,7 +674,7 @@ final class AppState: ObservableObject {
         let text: String?
         switch (event.source, event.event) {
         case ("shell", "start"): text = event.cmd
-        case ("claude", "UserPromptSubmit"): text = event.prompt
+        case ("claude", "UserPromptSubmit"): text = event.userPrompt
         case ("codex", "agent-turn-complete"): text = runtime.lastPrompt
         default: text = nil
         }

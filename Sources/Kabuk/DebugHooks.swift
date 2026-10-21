@@ -226,6 +226,9 @@ enum DebugHooks {
                     for pane in session.root.panes {
                         let r = state.runtime(pane)
                         text += "    \(pane.id.uuidString.prefix(8)) \(r.status) permission=\(r.permission.map { "\($0.tool): \($0.detail)" } ?? "-") ports=\(r.ports)\n"
+                        for sub in r.subagents {
+                            text += "      subagent \(sub.type) '\(sub.title)' \(sub.state) tools=\(sub.toolCount) last=\(sub.lastTool ?? "-") branch=\(sub.branch ?? "-") transcript=\(sub.transcript != nil)\n"
+                        }
                         if let view = state.terminals.views[pane.id] {
                             text += "      view: inWindow=\(view.window != nil) superview=\(view.superview.map { String(describing: type(of: $0)) } ?? "nil") frame=\(view.frame) hidden=\(view.isHiddenOrHasHiddenAncestor)\n"
                         }

@@ -55,6 +55,13 @@ public struct HookEvent: Codable, Equatable, Sendable {
         self.transcript = transcript
     }
 
+    /// The prompt as the user typed it. Claude also submits its own notices, such as
+    /// "<task-notification>" when a background subagent finishes; those aren't the user's words.
+    public var userPrompt: String? {
+        guard let prompt, !prompt.isEmpty, !prompt.hasPrefix("<") else { return nil }
+        return prompt
+    }
+
     public static func parse(_ line: Data) -> HookEvent? {
         try? JSONDecoder().decode(HookEvent.self, from: line)
     }
