@@ -53,6 +53,10 @@ public struct WorkspaceSnapshot: Codable, Equatable, Sendable {
     public var animatedBackground: Bool
     /// Claude's editing subagents get their own git worktree.
     public var subagentWorktrees: Bool
+    /// Kabuk looks for a newer release once a day.
+    public var updateChecks: Bool
+    /// The newest version whose release notes were shown; nil in state saved before 0.2.0.
+    public var lastSeenVersion: String?
 
     /// Pane card tint levels. Glass matches the sidebar: the blurred window shows through.
     public static let glass = 0.08
@@ -62,7 +66,8 @@ public struct WorkspaceSnapshot: Codable, Equatable, Sendable {
 
     public init(projects: [Project], selectedSession: UUID?, sidebarVisible: Bool = true,
                 opacity: Double = WorkspaceSnapshot.glass, fontSize: Double = 13, themeID: String = TerminalTheme.kabuk.id,
-                animatedBackground: Bool = true, subagentWorktrees: Bool = true) {
+                animatedBackground: Bool = true, subagentWorktrees: Bool = true, updateChecks: Bool = true,
+                lastSeenVersion: String? = nil) {
         self.projects = projects
         self.selectedSession = selectedSession
         self.sidebarVisible = sidebarVisible
@@ -71,6 +76,8 @@ public struct WorkspaceSnapshot: Codable, Equatable, Sendable {
         self.themeID = themeID
         self.animatedBackground = animatedBackground
         self.subagentWorktrees = subagentWorktrees
+        self.updateChecks = updateChecks
+        self.lastSeenVersion = lastSeenVersion
     }
 
     /// Fields added in later versions fall back to defaults, so older state files still load.
@@ -85,5 +92,7 @@ public struct WorkspaceSnapshot: Codable, Equatable, Sendable {
         themeID = try c.decodeIfPresent(String.self, forKey: .themeID) ?? TerminalTheme.kabuk.id
         animatedBackground = try c.decodeIfPresent(Bool.self, forKey: .animatedBackground) ?? true
         subagentWorktrees = try c.decodeIfPresent(Bool.self, forKey: .subagentWorktrees) ?? true
+        updateChecks = try c.decodeIfPresent(Bool.self, forKey: .updateChecks) ?? true
+        lastSeenVersion = try c.decodeIfPresent(String.self, forKey: .lastSeenVersion)
     }
 }

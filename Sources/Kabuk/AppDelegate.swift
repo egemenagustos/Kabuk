@@ -13,7 +13,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         NSApp.appearance = NSAppearance(named: .darkAqua)
         try? ShellIntegration.install()
 
-        state = AppState(snapshot: Persistence.load())
+        let snapshot = Persistence.load()
+        let hadState = snapshot != nil
+        state = AppState(snapshot: snapshot)
         // The demo copy shouldn't post into the user's notification center.
         if AppState.isDemo { state.notifier.muted = true } else { state.notifier.requestAuthorization() }
 
@@ -41,8 +43,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         if ProcessInfo.processInfo.environment["KABUK_DEBUG_DIR"] == nil || AppState.isDemo {
             NSApp.activate(ignoringOtherApps: true)
         }
-        if ProcessInfo.processInfo.environment["KABUK_DEBUG_DIR"] == nil && !AppState.isDemo {
-            DispatchQueue.main.async { IntegrationUI.offerUpdateIfOutdated() }
+        let environment = ProcessInfo.processInfo.environment
+        if (environment["KABUK_DEBUG_DIR"] == nil && !AppState.isDemo) || environment["KABUK_UPDATE_FEED"] != nil {
+            let state = state!
+            DispatchQueue.main.async {
+                // What's New offers the integration update itself.
+                if !state.startUpdates(hadState: hadState) && environment["KABUK_DEBUG_DIR"] == nil {
+                    IntegrationUI.offerUpdateIfOutdated()
+                }
+            }
         }
     }
 
@@ -52,6 +61,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         state.saveNow()
         state.terminals.closeAll()
         server?.stop()
+        state.installPendingUpdate()
     }
 
     private func buildWindow() {
@@ -134,5 +144,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     @objc func findNext(_ sender: Any?) { state.findStep(forward: true) }
     @objc func findPrevious(_ sender: Any?) { state.findStep(forward: false) }
     @objc func installIntegrations(_ sender: Any?) { IntegrationUI.install() }
+    @objc func checkForUpdates(_ sender: Any?) { state.checkForUpdates(manual: true) }
+    @objc func showWhatsNew(_ sender: Any?) { state.showWhatsNew() }
     @objc func uninstallIntegrations(_ sender: Any?) { IntegrationUI.uninstall() }
 }

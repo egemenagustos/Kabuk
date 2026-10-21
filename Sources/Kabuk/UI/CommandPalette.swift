@@ -147,6 +147,19 @@ struct CommandPalette: View {
                 IntegrationUI.uninstall()
             },
         ]
+        if let update = s.availableUpdate {
+            items.append(Item(id: "update-available", title: "Install Kabuk \(update.version)…", subtitle: "update",
+                              symbol: "arrow.down.circle", status: nil) { s.showUpdate() })
+        }
+        items += [
+            Item(id: "check-updates", title: "Check for Updates…", subtitle: Updater.currentVersion.map { "you have \($0)" } ?? "",
+                 symbol: "arrow.triangle.2.circlepath", status: nil) { s.checkForUpdates(manual: true) },
+            Item(id: "whats-new", title: "What's New in Kabuk", subtitle: "release notes", symbol: "sparkles", status: nil) {
+                s.showWhatsNew()
+            },
+            Item(id: "update-checks", title: s.updateChecks ? "Turn Off Automatic Update Checks" : "Turn On Automatic Update Checks",
+                 subtitle: "once a day, from GitHub", symbol: "arrow.down.circle.dotted", status: nil) { s.updateChecks.toggle() },
+        ]
         items.append(Item(id: "subagent-worktrees",
                           title: s.subagentWorktrees ? "Turn Off Subagent Worktrees" : "Turn On Subagent Worktrees",
                           subtitle: "Claude subagents that edit get their own worktree", symbol: "square.stack.3d.down.right", status: nil) {

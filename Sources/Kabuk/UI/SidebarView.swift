@@ -18,6 +18,12 @@ struct SidebarView: View {
                 .padding(.bottom, 12)
             }
             .scrollIndicators(.never)
+            if let update = state.availableUpdate {
+                UpdateChip(update: update)
+                    .padding(.horizontal, 8)
+                    .padding(.bottom, 6)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
             StatusBar()
         }
     }

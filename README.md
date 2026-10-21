@@ -134,6 +134,22 @@ open build/Kabuk.app
 
 Copy `build/Kabuk.app` into `/Applications` to keep it. The app is signed ad hoc. If macOS refuses to open a copy you downloaded, right-click it and choose **Open**.
 
+Releases with a ready-built `Kabuk-x.y.z.zip` are on the [releases page](https://github.com/egemenagustos/Kabuk/releases).
+
+### Updating
+
+From 0.2.0 on, Kabuk keeps itself up to date:
+
+- Once a day it asks GitHub for the list of releases. When there's a newer one, a chip at the bottom of the sidebar says so. Click it to read what changed in every version since yours.
+- **Install and Restart** downloads the release, checks that it's Kabuk at that version with an intact signature, quits, swaps it in and opens it again. Your sessions, splits and folders come back; whatever was running in them stops, and Kabuk warns you first.
+- **Install When I Quit** downloads it now and swaps it in when you next quit Kabuk, so nothing running is interrupted.
+- When Kabuk can't replace itself (for example, it can't write to the folder it's in), **Download** opens the release page instead.
+- The first launch of a new version shows **What's New**, and offers to update the Claude Code hooks if the new features need more of them.
+
+**Kabuk → Check for Updates…** checks right away. **Skip This Version** hides a release until a newer one comes out. The daily check can be turned off from the palette (⌘K, "update checks").
+
+0.1.0 can't update itself: download 0.2.0 once from the releases page (or pull and rebuild), and later versions arrive on their own.
+
 Kabuk runs your login shell. The zsh integration (status, failed-output capture, history) is zsh-only. Other shells work as plain terminals.
 
 ## Connect Claude Code and Codex
@@ -216,6 +232,7 @@ Everything lives in `~/Library/Application Support/Kabuk/`:
 | `kabuk.sock` | The socket that hooks talk to |
 | `subagent-worktrees-off` | Present while subagent worktrees are turned off |
 | `prompts/` | Prompts handed to agents started by Kabuk |
+| `Updates/` | A downloaded update until it's installed |
 
 ## How it works
 
@@ -261,7 +278,9 @@ scripts/build-app.sh # the .app bundle
 
 ## Privacy
 
-Kabuk makes no network requests. Everything it records stays in `~/Library/Application Support/Kabuk/`:
+The only network request Kabuk makes is the daily update check: it asks `api.github.com` for this repository's list of releases, and downloads a release when you choose to install it. Nothing about you or your work is sent. You can turn the check off from the palette.
+
+Everything Kabuk records stays in `~/Library/Application Support/Kabuk/`:
 - commands and their folders
 - token counts and costs
 - your sessions

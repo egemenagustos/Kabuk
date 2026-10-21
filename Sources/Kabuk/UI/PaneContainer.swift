@@ -16,7 +16,7 @@ struct PaneContainer: View {
             TerminalPaneView(paneID: pane.id, cwd: pane.cwd,
                              isFocused: isFocused && !state.paletteVisible && !state.themeGalleryVisible && state.findPane == nil
                                 && state.diffRequest == nil && !state.historyVisible && state.worktreeReview == nil
-                                && state.subagentDetail == nil)
+                                && state.subagentDetail == nil && state.updateSheet == nil)
                 .padding(.horizontal, 12)
                 .padding(.bottom, 8)
             let children = state.childSessions(of: pane.id)

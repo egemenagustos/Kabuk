@@ -103,6 +103,8 @@ scripts/release.sh 0.2.0             # releases
 
 The script turns **Unreleased** into `## [0.2.0] - <today>`, rewrites README's What's new from it, sets the version in `Resources/Info.plist`, runs the tests, builds and zips the app, then commits `Release 0.2.0` and tags `v0.2.0`. After you confirm, it pushes and creates the GitHub release with that version's notes and the zip. Publishing needs the GitHub CLI signed in (`gh auth login`).
 
+Installed copies of Kabuk find the release through the GitHub API, so keep its shape: the tag is `vX.Y.Z`, the release is neither a draft nor a prerelease, its notes are the CHANGELOG section (shown in the app's update sheet), and it carries `Kabuk-X.Y.Z.zip` with `Kabuk.app` at the top level. The app is built with `CHANGELOG.md` inside it for What's New. To try the update flow without publishing, point a debug copy at a local release list with `KABUK_UPDATE_FEED=file:///path/to/releases.json`.
+
 ## Reporting bugs
 
 Please include:

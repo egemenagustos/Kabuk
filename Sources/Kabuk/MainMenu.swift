@@ -30,6 +30,8 @@ enum MainMenu {
 
         submenu("Kabuk", [
             item("About Kabuk", #selector(NSApplication.orderFrontStandardAboutPanel(_:)), toTarget: false),
+            item("Check for Updates…", #selector(AppDelegate.checkForUpdates(_:))),
+            item("What's New in Kabuk", #selector(AppDelegate.showWhatsNew(_:))),
             .separator(),
             item("Install Claude/Codex Integration…", #selector(AppDelegate.installIntegrations(_:))),
             item("Remove Integration", #selector(AppDelegate.uninstallIntegrations(_:))),

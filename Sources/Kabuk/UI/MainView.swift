@@ -26,7 +26,7 @@ struct MainView: View {
             }
 
             if state.paletteVisible || state.themeGalleryVisible || state.diffRequest != nil || state.historyVisible
-                || state.worktreeReview != nil || state.subagentDetail != nil {
+                || state.worktreeReview != nil || state.subagentDetail != nil || state.updateSheet != nil {
                 Color.black.opacity(0.25)
                     .ignoresSafeArea()
                     .onTapGesture {
@@ -40,6 +40,8 @@ struct MainView: View {
                             withAnimation(.easeOut(duration: 0.2)) { state.diffRequest = nil }
                         } else if state.subagentDetail != nil {
                             state.closeSubagentDetail()
+                        } else if state.updateSheet != nil {
+                            state.closeUpdateSheet()
                         } else {
                             state.closeWorktreeReview()
                         }
@@ -64,6 +66,11 @@ struct MainView: View {
             if let request = state.diffRequest {
                 DiffSheet(request: request)
                     .padding(.top, 60)
+                    .transition(.scale(scale: 0.96, anchor: .top).combined(with: .opacity))
+            }
+            if let sheet = state.updateSheet {
+                UpdateSheetView(sheet: sheet)
+                    .padding(.top, 70)
                     .transition(.scale(scale: 0.96, anchor: .top).combined(with: .opacity))
             }
             if state.paletteVisible {

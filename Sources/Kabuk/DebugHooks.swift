@@ -16,6 +16,8 @@ import SwiftUI
 ///   dev.kabuk.review (object)   "open" shows the first worktree session's review; "merge" or "squash" merges it
 ///                               and writes <dir>/review.txt
 ///   dev.kabuk.undo (object)     "undo" or "redo" for the first pane with a turn summary, without asking
+///   dev.kabuk.update (object)   "check" checks now, "whatsnew" shows the notes, "install" or "quit-install" installs
+///                               the found update, "quit" quits; every command writes <dir>/update.txt with the update state
 ///   dev.kabuk.failure           writes <dir>/failure.txt: each pane's captured failure and its prompt
 ///   dev.kabuk.ask (object)      asks claude or codex about the first captured failure
 ///   dev.kabuk.dump              writes <dir>/focus.txt: the focused pane and the first responder
@@ -64,7 +66,30 @@ enum DebugHooks {
                 if state.diffRequest != nil { withAnimation(.easeOut(duration: 0.2)) { state.diffRequest = nil } }
                 if state.worktreeReview != nil { state.closeWorktreeReview() }
                 if state.subagentDetail != nil { state.closeSubagentDetail() }
+                if state.updateSheet != nil { state.closeUpdateSheet() }
                 if state.findPane != nil { state.toggleFind() }
+            }
+        }
+        center.addObserver(forName: .init("dev.kabuk.update"), object: nil, queue: .main) { note in
+            MainActor.assumeIsolated {
+                switch note.object as? String {
+                case "check": state.checkForUpdates(manual: true)
+                case "whatsnew": state.showWhatsNew()
+                case "install": state.installUpdate(restart: true)
+                case "quit-install": state.installUpdate(restart: false)
+                case "quit": NSApp.terminate(nil)
+                default: break
+                }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
+                    output("update.txt", """
+                    current: \(Updater.currentVersion?.description ?? "-")
+                    available: \(state.availableUpdate.map { "\($0.version) \($0.download?.absoluteString ?? "no zip")" } ?? "-")
+                    notes: \(state.availableUpdate?.notes.map(\.id).joined(separator: ",") ?? "-")
+                    progress: \(state.updateProgress)
+                    sheet: \(state.updateSheet.map { "\($0)" } ?? "-")
+                    problem: \(state.updateInstallProblem ?? "-")
+                    """)
+                }
             }
         }
         center.addObserver(forName: .init("dev.kabuk.select"), object: nil, queue: .main) { note in

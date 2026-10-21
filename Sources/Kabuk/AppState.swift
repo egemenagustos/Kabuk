@@ -28,6 +28,24 @@ final class AppState: ObservableObject {
             scheduleSave()
         }
     }
+    /// Kabuk looks for a newer release once a day.
+    @Published var updateChecks: Bool {
+        didSet {
+            scheduleSave()
+            if updateChecks { checkForUpdates(manual: false) }
+        }
+    }
+    /// The newest version whose release notes were shown.
+    private var lastSeenVersion: String?
+    /// A newer release, found by the last check.
+    @Published private(set) var availableUpdate: AvailableUpdate?
+    @Published private(set) var updateProgress: UpdateProgress = .idle
+    @Published private(set) var checkingForUpdates = false
+    /// What's New or the available update, when its sheet is open.
+    @Published var updateSheet: UpdateSheet?
+    /// A downloaded update that goes in when Kabuk quits, and whether Kabuk opens again after.
+    private(set) var pendingInstall: (app: URL, relaunch: Bool)?
+    private var updateTimer: Timer?
     /// Sessions whose children (subagents, child sessions) are folded away in the sidebar.
     @Published var collapsedSessions: Set<UUID> = []
     /// The subagent whose live view is open: its pane and id.
@@ -106,6 +124,8 @@ final class AppState: ObservableObject {
         themeID = snapshot.themeID
         animatedBackground = snapshot.animatedBackground
         subagentWorktrees = snapshot.subagentWorktrees
+        updateChecks = snapshot.updateChecks
+        lastSeenVersion = snapshot.lastSeenVersion
         Self.writeSubagentWorktreesFlag(snapshot.subagentWorktrees)
         terminals.fontSize = snapshot.fontSize
         reloadThemes()
@@ -1153,6 +1173,174 @@ final class AppState: ObservableObject {
         withAnimation(.easeInOut(duration: 0.4)) { animatedBackground.toggle() }
     }
 
+    // MARK: Updates
+
+    /// Called once after launch: says why the last install failed, shows the notes of the versions
+    /// that are new since the last launch, and starts the daily check. Returns true when What's
+    /// New is on screen, which then also offers any integration update.
+    @discardableResult
+    func startUpdates(hadState: Bool) -> Bool {
+        if let failure = Updater.takeInstallFailure() {
+            let alert = NSAlert()
+            alert.messageText = "Kabuk couldn't install the update"
+            alert.informativeText = failure + "\n\nYou can download the new version from GitHub and replace Kabuk.app yourself."
+            alert.addButton(withTitle: "Open Releases")
+            alert.addButton(withTitle: "OK")
+            if alert.runModal() == .alertFirstButtonReturn {
+                NSWorkspace.shared.open(URL(string: "https://github.com/\(Updater.repository)/releases/latest")!)
+            }
+        }
+        var showing = false
+        if let current = Updater.currentVersion {
+            let notes = WhatsNew.notes(Updater.bundledReleases(), lastSeen: lastSeenVersion, hasState: hadState, current: current)
+            if lastSeenVersion.flatMap(AppVersion.init).map({ $0 < current }) ?? true {
+                lastSeenVersion = current.description
+                scheduleSave()
+            }
+            if !notes.isEmpty {
+                updateSheet = .whatsNew(notes)
+                showing = true
+            }
+        }
+        // Each tick checks only when a day has passed, so sleep and long uptimes are covered.
+        updateTimer = Timer.scheduledTimer(withTimeInterval: 60 * 60, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.checkForUpdates(manual: false) }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 5) { [weak self] in self?.checkForUpdates(manual: false) }
+        return showing
+    }
+
+    /// Looks for a newer release. An automatic check only shows the sidebar chip, at most once a
+    /// day and never for a skipped version; a manual one opens the sheet or says it's up to date.
+    func checkForUpdates(manual: Bool) {
+        guard Updater.isBundled, !checkingForUpdates, updateProgress != .downloading else { return }
+        let defaults = UserDefaults.standard
+        if !manual {
+            guard updateChecks, UpdateSchedule.isDue(lastCheck: defaults.object(forKey: "lastUpdateCheck") as? Date) else { return }
+        }
+        checkingForUpdates = true
+        Task {
+            defer { checkingForUpdates = false }
+            do {
+                let update = try await Updater.check()
+                defaults.set(Date(), forKey: "lastUpdateCheck")
+                if let update, manual || defaults.string(forKey: "skippedUpdateVersion") != update.version.description {
+                    if availableUpdate?.version != update.version {
+                        // A newer release than the one downloaded: start over with it.
+                        updateProgress = .idle
+                        pendingInstall = nil
+                    }
+                    withAnimation(.spring(response: 0.4, dampingFraction: 0.85)) { availableUpdate = update }
+                    if manual { showUpdate() }
+                } else if manual {
+                    let alert = NSAlert()
+                    alert.messageText = "Kabuk is up to date"
+                    alert.informativeText = "\(Updater.currentVersion?.description ?? "This") is the newest version."
+                    alert.runModal()
+                }
+            } catch {
+                guard manual else { return }
+                let alert = NSAlert()
+                alert.messageText = "Couldn't check for updates"
+                alert.informativeText = error.localizedDescription
+                alert.runModal()
+            }
+        }
+    }
+
+    func showUpdate() {
+        guard availableUpdate != nil else { return }
+        withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) { updateSheet = .available }
+    }
+
+    func showWhatsNew() {
+        guard let current = Updater.currentVersion,
+              let notes = Updater.bundledReleases().first(where: { $0.version <= current }) else {
+            let alert = NSAlert()
+            alert.messageText = "No release notes in this build"
+            alert.informativeText = "Builds from main list their changes in CHANGELOG.md under Unreleased."
+            alert.runModal()
+            return
+        }
+        withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) { updateSheet = .whatsNew([notes]) }
+    }
+
+    func closeUpdateSheet() {
+        withAnimation(.easeOut(duration: 0.2)) { updateSheet = nil }
+    }
+
+    /// Hides this version until a newer one comes out; a manual check still finds it.
+    func skipUpdate() {
+        guard let update = availableUpdate else { return }
+        UserDefaults.standard.set(update.version.description, forKey: "skippedUpdateVersion")
+        closeUpdateSheet()
+        withAnimation { availableUpdate = nil }
+    }
+
+    /// Why the update can't install itself here, so the sheet offers the download page instead.
+    var updateInstallProblem: String? {
+        guard let update = availableUpdate else { return nil }
+        if update.download == nil { return Updater.Failure.noDownload.localizedDescription }
+        return Updater.installProblem
+    }
+
+    /// Downloads the update if needed, then installs it now (Kabuk quits and opens again) or when
+    /// Kabuk quits.
+    func installUpdate(restart: Bool) {
+        guard let update = availableUpdate else { return }
+        var restart = restart
+        if restart {
+            let running = runtimes.values.filter { $0.agent != nil || $0.status.isBusy }.count
+            if running > 0 {
+                let alert = NSAlert()
+                alert.messageText = "Restart Kabuk now?"
+                alert.informativeText = "\(running) pane\(running == 1 ? " is" : "s are") running something, and restarting stops it. "
+                    + "Your sessions, splits and folders come back after the restart."
+                alert.addButton(withTitle: "Restart")
+                alert.addButton(withTitle: "Install When I Quit")
+                alert.addButton(withTitle: "Cancel")
+                switch alert.runModal() {
+                case .alertFirstButtonReturn: break
+                case .alertSecondButtonReturn: restart = false
+                default: return
+                }
+            }
+        }
+        if case .ready(let app) = updateProgress {
+            finishInstall(app, restart: restart)
+            return
+        }
+        updateProgress = .downloading
+        Task {
+            do {
+                let app = try await Updater.download(update)
+                updateProgress = .ready(app)
+                finishInstall(app, restart: restart)
+            } catch {
+                updateProgress = .failed(error.localizedDescription)
+            }
+        }
+    }
+
+    private func finishInstall(_ app: URL, restart: Bool) {
+        pendingInstall = (app, restart)
+        if restart {
+            NSApp.terminate(nil)
+        } else {
+            closeUpdateSheet()
+        }
+    }
+
+    /// Starts the swap of a downloaded update; called as Kabuk quits.
+    func installPendingUpdate() {
+        guard let pending = pendingInstall else { return }
+        do {
+            try Updater.installWhenQuit(pending.app, relaunch: pending.relaunch)
+        } catch {
+            NSLog("Kabuk: update install couldn't start: \(error)")
+        }
+    }
+
     // MARK: Persistence
 
     var snapshot: WorkspaceSnapshot {
@@ -1169,7 +1357,8 @@ final class AppState: ObservableObject {
         return WorkspaceSnapshot(projects: projects, selectedSession: selectedSessionID,
                                  sidebarVisible: sidebarVisible, opacity: opacity, fontSize: fontSize,
                                  themeID: themeID, animatedBackground: animatedBackground,
-                                 subagentWorktrees: subagentWorktrees)
+                                 subagentWorktrees: subagentWorktrees, updateChecks: updateChecks,
+                                 lastSeenVersion: lastSeenVersion)
     }
 
     func scheduleSave() {
@@ -1186,6 +1375,18 @@ final class AppState: ObservableObject {
         saveWork?.cancel()
         Persistence.save(snapshot)
     }
+}
+
+enum UpdateSheet: Equatable {
+    case available
+    case whatsNew([ReleaseNote])
+}
+
+enum UpdateProgress: Equatable {
+    case idle, downloading
+    /// Downloaded, checked and unpacked: the new Kabuk.app.
+    case ready(URL)
+    case failed(String)
 }
 
 struct SubagentDetailRequest: Equatable {

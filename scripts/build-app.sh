@@ -12,6 +12,8 @@ rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN/Kabuk" "$BIN/kabuk-hook" "$APP/Contents/MacOS/"
 cp Resources/Info.plist "$APP/Contents/"
+# What's New reads the release notes from inside the app.
+cp CHANGELOG.md "$APP/Contents/Resources/"
 
 if [ ! -f build/AppIcon.icns ]; then
   swift scripts/make-icon.swift build/AppIcon.iconset
