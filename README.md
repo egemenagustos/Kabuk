@@ -29,10 +29,10 @@ Kabuk (Turkish for *shell*) is a glassy, dark terminal that knows when Claude Co
 ## What's new
 
 <!-- whats-new:start -->
-**0.3.2** (2026-10-21):
+**0.4.0** (2026-10-21):
 
-- Fixed: Codex plan limits and turn updates reach Kabuk again. Codex now runs its turns on one shared background server, started from whichever terminal opened Codex first, so its turn notices went to that terminal's pane, or nowhere. Inside Kabuk, `codex` now keeps its own server (`--no-daemon`), and each turn reports from the pane it runs in. `codex agents`, which needs the shared server, runs as before.
-- Fixed: The sidebar no longer spills over its left and right edges. Plan limits, today's cost, the shortcuts and the counters didn't fit on one line, so the status bar now puts the limits and the cost on a row of their own.
+- Added: **Codex cost.** Codex models' API prices are now built in, so Codex sessions count toward today's cost. Until now only Claude was counted, because no Codex model had a price. Codex sessions that ended before this version aren't counted after the fact.
+- Added: **Cost details.** Hover over or click today's cost in the status bar, the same way as the plan limits, to see it split between Claude and Codex, with the last seven days as bars. A note explains that the numbers are API-equivalent: what the tokens would cost at API list prices, not what a Claude or ChatGPT plan bills you.
 
 See **[CHANGELOG.md](CHANGELOG.md)** for every version and what is on `main` but not released yet.
 <!-- whats-new:end -->

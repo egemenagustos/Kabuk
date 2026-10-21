@@ -6,6 +6,8 @@ Changes that are on `main` but not released yet are listed under **Unreleased**.
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-21
+
 ### Added
 
 - **Codex cost.** Codex models' API prices are now built in, so Codex sessions count toward today's cost. Until now only Claude was counted, because no Codex model had a price. Codex sessions that ended before this version aren't counted after the fact.
@@ -75,7 +77,8 @@ The first release.
 - Seven themes plus your own JSON themes, three transparency levels, Liquid Glass on macOS 26.
 - Split panes, git badges, cost tracking, notifications, a Dock badge and session restore.
 
-[Unreleased]: https://github.com/egemenagustos/Kabuk/compare/v0.3.2...HEAD
+[Unreleased]: https://github.com/egemenagustos/Kabuk/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/egemenagustos/Kabuk/compare/v0.3.2...v0.4.0
 [0.3.2]: https://github.com/egemenagustos/Kabuk/compare/v0.3.1...v0.3.2
 [0.3.1]: https://github.com/egemenagustos/Kabuk/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/egemenagustos/Kabuk/compare/v0.2.0...v0.3.0
