@@ -9,6 +9,7 @@ Changes that are on `main` but not released yet are listed under **Unreleased**.
 ### Added
 
 - **Undo a turn.** The turn card has an Undo button that puts every file the agent changed back the way it was before the turn, untracked files included, and moves the branch back if the agent committed. Redo brings the changes back.
+- **Review notes for the agent.** Hover a line in a turn's diff to leave a note on it. The notes go to the pane's agent as one prompt, with file, line and code, or wait until the agent's current turn ends. Diffs now show line numbers.
 
 ### Changed
 

@@ -11,6 +11,7 @@ import SwiftUI
 ///   dev.kabuk.theme (object)     switches to the theme with that id
 ///   dev.kabuk.answer (object)   answers the first held permission request: allow, deny, always, ask
 ///   dev.kabuk.showdiff (object) opens the diff of that file (or the first) in any turn summary
+///   dev.kabuk.note (object)     leaves that note on the first changed line of the open diff; "send" sends the notes
 ///   dev.kabuk.undo (object)     "undo" or "redo" for the first pane with a turn summary, without asking
 ///   dev.kabuk.failure           writes <dir>/failure.txt: each pane's captured failure and its prompt
 ///   dev.kabuk.ask (object)      asks claude or codex about the first captured failure
@@ -144,6 +145,20 @@ enum DebugHooks {
                     guard let file = change.files.first(where: { name == nil || $0.path == name }) else { continue }
                     state.showDiff(file, of: pane)
                     return
+                }
+            }
+        }
+        center.addObserver(forName: .init("dev.kabuk.note"), object: nil, queue: .main) { note in
+            MainActor.assumeIsolated {
+                guard let request = state.diffRequest, let pane = request.paneID, let text = note.object as? String else { return }
+                if text == "send" {
+                    state.sendComments(for: pane)
+                    return
+                }
+                Task {
+                    let lines = await Task.detached { TurnTracker.diff(request.file, in: request.change) }.value
+                    guard let line = lines.first(where: { $0.kind == .add || $0.kind == .remove }) else { return }
+                    state.addComment(DiffComment(path: request.file.path, diffLine: line, note: text), for: pane)
                 }
             }
         }

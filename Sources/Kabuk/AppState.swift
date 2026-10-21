@@ -56,6 +56,10 @@ final class AppState: ObservableObject {
     @Published var expandedTurnCards: Set<UUID> = []
     /// The file whose turn diff is on screen.
     @Published var diffRequest: DiffRequest?
+    /// Notes the user left on diff lines, per agent pane, until they're sent.
+    @Published private(set) var reviewComments: [UUID: [DiffComment]] = [:]
+    /// Prompts waiting for the pane's agent to finish its turn.
+    @Published private(set) var pendingPrompts: [UUID: String] = [:]
     /// The demo's caption strip, shown only when Kabuk runs with KABUK_DEMO.
     @Published var demoCaption: DemoCaption?
     static let isDemo = ProcessInfo.processInfo.environment["KABUK_DEMO"] != nil
@@ -500,6 +504,11 @@ final class AppState: ObservableObject {
         let visible = isVisible(paneID)
         let title = session.title
 
+        if case .succeeded = new.status, new.agent != nil, old.status.isBusy || old.status.needsYou,
+           let prompt = pendingPrompts.removeValue(forKey: paneID) {
+            // Give the agent's input a moment to come back before typing into it.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in self?.paste(prompt, into: paneID) }
+        }
         switch (old.status, new.status) {
         case (.agentWorking(let agent, _), .succeeded):
             if !visible {
@@ -524,6 +533,8 @@ final class AppState: ObservableObject {
         }
 
         runtimes[paneID] = new
+        // The agent quit; notes queued for it have nobody to go to.
+        if old.agent != nil, new.agent == nil { pendingPrompts[paneID] = nil }
         if let event, event.source == "shell", event.event == "start", let command = event.cmd {
             ports.scan(after: 1.5)
             history.record(command, cwd: old.cwd)
@@ -742,7 +753,49 @@ final class AppState: ObservableObject {
 
     func showDiff(_ file: FileChange, of paneID: UUID) {
         guard let change = turnChanges[paneID] else { return }
-        withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) { diffRequest = DiffRequest(file: file, change: change) }
+        withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) {
+            diffRequest = DiffRequest(file: file, change: change, paneID: paneID)
+        }
+    }
+
+    // MARK: Review notes
+
+    func addComment(_ comment: DiffComment, for paneID: UUID) {
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) { reviewComments[paneID, default: []].append(comment) }
+    }
+
+    func removeComment(_ id: UUID, for paneID: UUID) {
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
+            reviewComments[paneID]?.removeAll { $0.id == id }
+            if reviewComments[paneID]?.isEmpty == true { reviewComments[paneID] = nil }
+        }
+    }
+
+    /// Who receives the notes: the pane's agent, or Claude in a new pane when none runs there.
+    func reviewAgent(for paneID: UUID) -> AgentKind {
+        runtimes[paneID]?.agent ?? .claude
+    }
+
+    /// Sends the notes as one prompt: typed in now if the agent is idle, after its turn if it's
+    /// working, or to a new agent in a split when the pane has none.
+    func sendComments(for paneID: UUID) {
+        guard let comments = reviewComments[paneID], !comments.isEmpty else { return }
+        let prompt = ReviewPrompt.build(comments)
+        let runtime = runtimes[paneID]
+        if runtime?.agent != nil {
+            if runtime?.status.isBusy == true {
+                pendingPrompts[paneID] = [pendingPrompts[paneID], prompt].compactMap { $0 }.joined(separator: "\n\n")
+            } else {
+                paste(prompt, into: paneID)
+            }
+        } else if let command = Self.agentCommand(.claude, prompt: prompt, name: "review") {
+            split(.horizontal, from: paneID, command: command)
+        }
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
+            reviewComments[paneID] = nil
+            diffRequest = nil
+        }
+        if let session = session(containing: paneID) { updateSession(session.id) { $0.focusedPane = paneID } }
     }
 
     // MARK: Git
@@ -938,6 +991,8 @@ final class AppState: ObservableObject {
 struct DiffRequest: Equatable {
     var file: FileChange
     var change: TurnChange
+    /// The agent pane that review notes on this diff go to.
+    var paneID: UUID?
 }
 
 struct CommandFailure: Equatable {

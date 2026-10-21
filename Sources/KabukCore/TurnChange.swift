@@ -115,44 +115,75 @@ public enum TurnUndo {
     }
 }
 
-/// A line of unified diff output, classified for coloring.
+/// A line of unified diff output, classified for coloring, with its line numbers in the old
+/// and new file where it has them.
 public struct DiffLine: Equatable, Identifiable, Sendable {
     public enum Kind: Sendable { case header, hunk, add, remove, context }
 
     public var id: Int
     public var kind: Kind
     public var text: String
+    public var oldLine: Int?
+    public var newLine: Int?
 
-    public init(id: Int, kind: Kind, text: String) {
+    public init(id: Int, kind: Kind, text: String, oldLine: Int? = nil, newLine: Int? = nil) {
         self.id = id
         self.kind = kind
         self.text = text
+        self.oldLine = oldLine
+        self.newLine = newLine
+    }
+
+    /// The line without its leading +, - or space.
+    public var code: String {
+        switch kind {
+        case .add, .remove, .context: return text.isEmpty ? "" : String(text.dropFirst())
+        case .header, .hunk: return text
+        }
     }
 
     public static func classify(_ diff: String) -> [DiffLine] {
-        diff.split(separator: "\n", omittingEmptySubsequences: false).enumerated().map { index, raw in
+        var old = 0, new = 0
+        // git ends its output with a newline; that's not an empty last line of the file.
+        let text = diff.hasSuffix("\n") ? String(diff.dropLast()) : diff
+        return text.split(separator: "\n", omittingEmptySubsequences: false).enumerated().map { index, raw in
             let line = String(raw)
-            let kind: Kind
             if line.hasPrefix("+++") || line.hasPrefix("---") || line.hasPrefix("diff ") || line.hasPrefix("index ")
                 || line.hasPrefix("new file") || line.hasPrefix("deleted file") {
-                kind = .header
-            } else if line.hasPrefix("@@") {
-                kind = .hunk
-            } else if line.hasPrefix("+") {
-                kind = .add
-            } else if line.hasPrefix("-") {
-                kind = .remove
-            } else {
-                kind = .context
+                return DiffLine(id: index, kind: .header, text: line)
             }
-            return DiffLine(id: index, kind: kind, text: line)
+            if line.hasPrefix("@@") {
+                (old, new) = hunkStart(line) ?? (old, new)
+                return DiffLine(id: index, kind: .hunk, text: line)
+            }
+            if line.hasPrefix("+") {
+                new += 1
+                return DiffLine(id: index, kind: .add, text: line, newLine: new)
+            }
+            if line.hasPrefix("-") {
+                old += 1
+                return DiffLine(id: index, kind: .remove, text: line, oldLine: old)
+            }
+            if line.hasPrefix("\\") { return DiffLine(id: index, kind: .header, text: line) }
+            old += 1
+            new += 1
+            return DiffLine(id: index, kind: .context, text: line, oldLine: old, newLine: new)
         }
+    }
+
+    /// "@@ -12,4 +12,6 @@" → the line numbers just before the hunk's first line, (11, 11).
+    static func hunkStart(_ header: String) -> (Int, Int)? {
+        let parts = header.split(separator: " ")
+        guard parts.count >= 3, parts[1].hasPrefix("-"), parts[2].hasPrefix("+"),
+              let old = Int(parts[1].dropFirst().split(separator: ",")[0]),
+              let new = Int(parts[2].dropFirst().split(separator: ",")[0]) else { return nil }
+        return (max(old - 1, 0), max(new - 1, 0))
     }
 
     /// Shows a new file's content as one big addition.
     public static func allAdded(_ content: String) -> [DiffLine] {
         content.split(separator: "\n", omittingEmptySubsequences: false).enumerated().map {
-            DiffLine(id: $0.offset, kind: .add, text: "+" + $0.element)
+            DiffLine(id: $0.offset, kind: .add, text: "+" + $0.element, newLine: $0.offset + 1)
         }
     }
 }

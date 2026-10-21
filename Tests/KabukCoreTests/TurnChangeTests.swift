@@ -50,6 +50,39 @@ final class TurnChangeTests: XCTestCase {
         XCTAssertEqual(change.head, "head")
     }
 
+    func testDiffLineNumbers() {
+        let diff = """
+        --- a/x
+        +++ b/x
+        @@ -10,3 +10,3 @@ func x() {
+         same
+        -old
+        +new
+         tail
+        """
+        let lines = DiffLine.classify(diff)
+        XCTAssertEqual(lines[3].newLine, 10)
+        XCTAssertEqual(lines[3].oldLine, 10)
+        XCTAssertEqual(lines[4].oldLine, 11)
+        XCTAssertNil(lines[4].newLine)
+        XCTAssertEqual(lines[5].newLine, 11)
+        XCTAssertEqual(lines[5].code, "new")
+        XCTAssertEqual(lines[6].newLine, 12)
+        XCTAssertEqual(DiffLine.allAdded("a\nb")[1].newLine, 2)
+        XCTAssertEqual(DiffLine.classify("@@ -1 +1 @@\n-a\n+b\n").count, 3)
+    }
+
+    func testReviewPrompt() {
+        let lines = DiffLine.classify("@@ -1,2 +1,2 @@\n-let a = 1\n+let a = 2")
+        let prompt = ReviewPrompt.build([
+            DiffComment(path: "a.swift", diffLine: lines[2], note: "Why 2? Use a constant."),
+            DiffComment(path: "a.swift", diffLine: lines[1], note: "Keep this line."),
+        ])
+        XCTAssertTrue(prompt.contains("- a.swift:1\n  `let a = 2`\n  Why 2? Use a constant."))
+        XCTAssertTrue(prompt.contains("- a.swift:1 (removed line)\n  `let a = 1`\n  Keep this line."))
+        XCTAssertTrue(prompt.hasSuffix("Please address each note."))
+    }
+
     func testDiffClassification() {
         let diff = """
         diff --git a/x b/x
