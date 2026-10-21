@@ -69,7 +69,9 @@ struct SkillPicker: View {
                     }
                     .padding(6)
                 }
-                .frame(maxHeight: 320)
+                // A fixed height: the popover keeps the size it opened with, so a list that grows
+                // after a scan, or shrinks as the query narrows it, would be cut off or leave a gap.
+                .frame(height: 320)
                 .onChange(of: selected) { _, new in
                     if skills.indices.contains(new) { proxy.scrollTo(skills[new].id) }
                 }

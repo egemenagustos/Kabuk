@@ -6,6 +6,10 @@ Changes that are on `main` but not released yet are listed under **Unreleased**.
 
 ## [Unreleased]
 
+### Fixed
+
+- The skill picker opens with its whole list the first time. The skills were scanned only when it opened, so the first time it opened empty and too small, and the list that arrived a moment later was cut off. Kabuk now scans an agent's skills as soon as the agent starts in a pane, and the picker keeps one height as its list grows or a search narrows it.
+
 ## [0.5.0] - 2026-10-21
 
 ### Added

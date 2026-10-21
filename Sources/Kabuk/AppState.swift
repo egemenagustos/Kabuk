@@ -676,6 +676,8 @@ final class AppState: ObservableObject {
             pendingPrompts[paneID] = nil
             if skillPickerPane == paneID { skillPickerPane = nil }
         }
+        // Scan ahead so the skill picker opens with its list instead of growing once the scan lands.
+        if let agent = new.agent, old.agent != agent || old.cwd != new.cwd { refreshSkills(for: paneID) }
         if let event, event.source == "shell", event.event == "start", let command = event.cmd {
             ports.scan(after: 1.5)
             history.record(command, cwd: old.cwd)
