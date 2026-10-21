@@ -20,7 +20,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         let server = SocketServer(path: ShellIntegration.socketPath) { [weak self] event, reply in
             DispatchQueue.main.async {
                 guard let state = self?.state else {
-                    reply?(.ask)
+                    reply?(.permission(.ask))
                     return
                 }
                 state.handle(event, reply: reply)
@@ -40,6 +40,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         // The demo is the exception: it's recorded, so it has to be in front.
         if ProcessInfo.processInfo.environment["KABUK_DEBUG_DIR"] == nil || AppState.isDemo {
             NSApp.activate(ignoringOtherApps: true)
+        }
+        if ProcessInfo.processInfo.environment["KABUK_DEBUG_DIR"] == nil && !AppState.isDemo {
+            DispatchQueue.main.async { IntegrationUI.offerUpdateIfOutdated() }
         }
     }
 

@@ -23,6 +23,15 @@ final class HookEventTests: XCTestCase {
     func testRoundTrip() {
         let event = HookEvent(pane: "p", source: "claude", event: "Notification", message: "çalışıyor ✳")
         XCTAssertEqual(HookEvent.parseAll(event.encodedLine()), [event])
+        let subagent = HookEvent(pane: "p", source: "claude", event: "SubagentStop", agent: "a1", agentType: "Explore",
+                                 transcript: "/t/agent-a1.jsonl")
+        XCTAssertEqual(HookEvent.parseAll(subagent.encodedLine()), [subagent])
+    }
+
+    func testReplyKeepsThePermissionFormat() {
+        XCTAssertEqual(String(decoding: HookReply.permission(.allow).encodedLine(), as: UTF8.self), "{\"decision\":\"allow\"}\n")
+        let spawned = HookReply(worktree: "/w/codex-1a2b", branch: "kabuk/codex-1a2b")
+        XCTAssertEqual(HookReply.parse(spawned.encodedLine()), spawned)
     }
 
     func testFuzzy() {

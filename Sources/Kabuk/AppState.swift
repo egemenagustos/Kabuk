@@ -439,7 +439,7 @@ final class AppState: ObservableObject {
     func handle(_ event: HookEvent, reply: SocketServer.Reply? = nil) {
         guard let paneID = UUID(uuidString: event.pane), let session = session(containing: paneID),
               let pane = session.root.panes.first(where: { $0.id == paneID }) else {
-            reply?(.ask)
+            reply?(.permission(.ask))
             return
         }
         let old = runtime(pane)
@@ -451,14 +451,14 @@ final class AppState: ObservableObject {
         if let request = event.request, let reply {
             if isVisible(paneID) {
                 // The user is looking at this pane: Claude's own prompt is right there.
-                reply(.ask)
+                reply(.permission(.ask))
                 new.permission = nil
             } else {
                 permissionReplies[request] = reply
             }
         }
         if let stale = old.permission, new.permission?.id != stale.id {
-            permissionReplies.removeValue(forKey: stale.id)?(.ask)
+            permissionReplies.removeValue(forKey: stale.id)?(.permission(.ask))
         }
         apply(new, to: paneID, old: old, session: session, event: event)
     }
@@ -467,7 +467,7 @@ final class AppState: ObservableObject {
 
     /// Answers a held permission request from the sidebar or a notification.
     func answerPermission(_ requestID: String, _ decision: PermissionDecision) {
-        permissionReplies.removeValue(forKey: requestID)?(decision)
+        permissionReplies.removeValue(forKey: requestID)?(.permission(decision))
         guard let (paneID, old) = runtimes.first(where: { $0.value.permission?.id == requestID }).map({ ($0.key, $0.value) }) else {
             return
         }
@@ -625,22 +625,36 @@ final class AppState: ObservableObject {
             let r = runtime(pane)
             return pane.id != paneID && r.agent == agent && !r.status.isBusy && !r.status.needsYou
         }
-        if let target = idle, let terminal = terminals.views[target.id] {
-            // Bracketed paste keeps the newlines in the prompt from submitting it early.
-            terminal.send(source: terminal, data: ArraySlice(Array(("\u{1b}[200~" + prompt + "\u{1b}[201~").utf8)))
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-                terminal.send(source: terminal, data: ArraySlice([13]))
-            }
+        if let target = idle, paste(prompt, into: target.id) {
             updateSession(session.id) { $0.focusedPane = target.id }
         } else {
-            let folder = ShellIntegration.supportDir.appendingPathComponent("prompts", isDirectory: true)
-            try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-            let file = folder.appendingPathComponent("failure-\(Int(Date().timeIntervalSince1970)).md")
-            guard (try? prompt.write(to: file, atomically: true, encoding: .utf8)) != nil else { return }
-            let quoted = "'" + file.path.replacingOccurrences(of: "'", with: "'\\''") + "'"
-            split(.horizontal, from: paneID, command: "\(agent.rawValue) \"$(cat \(quoted))\"")
+            guard let command = Self.agentCommand(agent, prompt: prompt, name: "failure") else { return }
+            split(.horizontal, from: paneID, command: command)
         }
         dismissFailure(paneID)
+    }
+
+    /// Submits a prompt at an agent's input. Bracketed paste keeps the newlines in the prompt
+    /// from submitting it early.
+    @discardableResult
+    func paste(_ prompt: String, into paneID: UUID) -> Bool {
+        guard let terminal = terminals.views[paneID] else { return false }
+        terminal.send(source: terminal, data: ArraySlice(Array(("\u{1b}[200~" + prompt + "\u{1b}[201~").utf8)))
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+            terminal.send(source: terminal, data: ArraySlice([13]))
+        }
+        return true
+    }
+
+    /// A shell command that starts the agent with a prompt. The prompt goes through a file, so
+    /// no quoting of its contents is needed.
+    static func agentCommand(_ agent: AgentKind, prompt: String, name: String) -> String? {
+        let folder = ShellIntegration.supportDir.appendingPathComponent("prompts", isDirectory: true)
+        try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let file = folder.appendingPathComponent("\(name)-\(Int(Date().timeIntervalSince1970))-\(WorktreeNaming.randomSuffix()).md")
+        guard (try? prompt.write(to: file, atomically: true, encoding: .utf8)) != nil else { return nil }
+        let quoted = "'" + file.path.replacingOccurrences(of: "'", with: "'\\''") + "'"
+        return "\(agent.rawValue) \"$(cat \(quoted))\""
     }
 
     // MARK: Turn changes

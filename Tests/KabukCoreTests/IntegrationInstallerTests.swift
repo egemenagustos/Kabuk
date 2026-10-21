@@ -42,6 +42,25 @@ final class IntegrationInstallerTests: XCTestCase {
         XCTAssertFalse(IntegrationInstaller.claudeInstalled())
     }
 
+    func testPreToolUseOnlyMatchesSubagentLaunches() throws {
+        try IntegrationInstaller.installClaude()
+        let json = try JSONSerialization.jsonObject(with: Data(contentsOf: IntegrationInstaller.claudeSettings)) as! [String: Any]
+        let hooks = json["hooks"] as! [String: Any]
+        XCTAssertEqual((hooks["PreToolUse"] as! [[String: Any]]).first?["matcher"] as? String, "Agent|Task")
+        XCTAssertNil((hooks["Stop"] as! [[String: Any]]).first?["matcher"])
+    }
+
+    func testOlderInstallIsOutdated() throws {
+        let old = """
+        {"hooks":{"Stop":[{"hooks":[{"type":"command","command":"[ -n \\"$KABUK_HOOK\\" ] && \\"$KABUK_HOOK\\" claude Stop || true"}]}]}}
+        """
+        try old.write(to: IntegrationInstaller.claudeSettings, atomically: true, encoding: .utf8)
+        XCTAssertTrue(IntegrationInstaller.claudeInstalled())
+        XCTAssertTrue(IntegrationInstaller.claudeOutdated())
+        try IntegrationInstaller.installClaude()
+        XCTAssertFalse(IntegrationInstaller.claudeOutdated())
+    }
+
     func testClaudeRefusesBrokenJSON() throws {
         try "{ not json".write(to: IntegrationInstaller.claudeSettings, atomically: true, encoding: .utf8)
         XCTAssertThrowsError(try IntegrationInstaller.installClaude())

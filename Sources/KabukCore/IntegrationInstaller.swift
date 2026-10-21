@@ -8,7 +8,10 @@ public enum IntegrationInstaller {
     public static var claudeSettings = URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent(".claude/settings.json")
     public static var codexConfig = URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent(".codex/config.toml")
 
-    public static let claudeEvents = ["UserPromptSubmit", "PostToolUse", "Notification", "Stop", "PermissionRequest"]
+    public static let claudeEvents = ["UserPromptSubmit", "PreToolUse", "PostToolUse", "Notification", "Stop", "PermissionRequest",
+                                      "SubagentStart", "SubagentStop"]
+    /// PreToolUse only matters for subagent launches; matching keeps the hook off every other tool call.
+    static let claudeMatchers = ["PreToolUse": "Agent|Task"]
     private static let marker = "KABUK_HOOK"
     private static let codexBegin = "# kabuk:begin"
     private static let codexEnd = "# kabuk:end"
@@ -39,7 +42,9 @@ public enum IntegrationInstaller {
             var groups = hooks[event] as? [[String: Any]] ?? []
             // A permission request waits for the user's answer; everything else returns at once.
             let timeout = event == "PermissionRequest" ? 600 : 5
-            groups.append(["hooks": [["type": "command", "command": claudeCommand(event), "timeout": timeout]]])
+            var group: [String: Any] = ["hooks": [["type": "command", "command": claudeCommand(event), "timeout": timeout]]]
+            if let matcher = claudeMatchers[event] { group["matcher"] = matcher }
+            groups.append(group)
             hooks[event] = groups
         }
         settings["hooks"] = hooks
@@ -57,6 +62,14 @@ public enum IntegrationInstaller {
     public static func claudeInstalled() -> Bool {
         guard let settings = try? readClaudeSettings(), let hooks = settings["hooks"] as? [String: Any] else { return false }
         return hasKabuk(hooks)
+    }
+
+    /// Installed by an older Kabuk that didn't know some of today's events yet.
+    public static func claudeOutdated() -> Bool {
+        guard let settings = try? readClaudeSettings(), let hooks = settings["hooks"] as? [String: Any], hasKabuk(hooks) else {
+            return false
+        }
+        return claudeEvents.contains { event in !(hooks[event] as? [[String: Any]] ?? []).contains(where: isKabukGroup) }
     }
 
     private static func hasKabuk(_ hooks: [String: Any]) -> Bool {

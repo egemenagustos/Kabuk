@@ -22,6 +22,23 @@ enum IntegrationUI {
         alert("Agent Integration", lines.joined(separator: "\n"))
     }
 
+    /// Hooks installed by an older Kabuk miss newer events (subagents). Asks once per set of events.
+    static func offerUpdateIfOutdated() {
+        let key = "declinedIntegrationUpdate"
+        let events = IntegrationInstaller.claudeEvents.joined(separator: ",")
+        guard IntegrationInstaller.claudeOutdated(), UserDefaults.standard.string(forKey: key) != events else { return }
+        let alert = NSAlert()
+        alert.messageText = "Update the Claude Code integration?"
+        alert.informativeText = "This version of Kabuk can show Claude's subagents and give them their own worktrees. That needs a few more hooks in ~/.claude/settings.json."
+        alert.addButton(withTitle: "Update")
+        alert.addButton(withTitle: "Not Now")
+        if alert.runModal() == .alertFirstButtonReturn {
+            install()
+        } else {
+            UserDefaults.standard.set(events, forKey: key)
+        }
+    }
+
     static func uninstall() {
         var lines: [String] = []
         do {

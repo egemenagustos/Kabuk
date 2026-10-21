@@ -24,11 +24,17 @@ public struct HookEvent: Codable, Equatable, Sendable {
     public var canAlwaysAllow: Bool?
     /// The agent's own session id (Claude) or thread id (Codex), for the cost ledger.
     public var session: String?
+    /// Set when a Claude subagent sent the event: its id and type ("general-purpose", "Explore", …).
+    public var agent: String?
+    public var agentType: String?
+    /// The subagent's transcript, on SubagentStart and SubagentStop.
+    public var transcript: String?
 
     public init(pane: String, source: String, event: String, cmd: String? = nil, code: Int32? = nil,
                 cwd: String? = nil, message: String? = nil, prompt: String? = nil, kind: String? = nil,
                 tokens: TokenUsage? = nil, request: String? = nil, tool: String? = nil, detail: String? = nil,
-                canAlwaysAllow: Bool? = nil, session: String? = nil) {
+                canAlwaysAllow: Bool? = nil, session: String? = nil, agent: String? = nil, agentType: String? = nil,
+                transcript: String? = nil) {
         self.pane = pane
         self.source = source
         self.event = event
@@ -44,6 +50,9 @@ public struct HookEvent: Codable, Equatable, Sendable {
         self.detail = detail
         self.canAlwaysAllow = canAlwaysAllow
         self.session = session
+        self.agent = agent
+        self.agentType = agentType
+        self.transcript = transcript
     }
 
     public static func parse(_ line: Data) -> HookEvent? {

@@ -6,7 +6,7 @@ import KabukCore
 /// `request` id keeps the connection open until the app answers through its `Reply`.
 final class SocketServer {
     /// Answers a waiting client once; later calls do nothing.
-    typealias Reply = (PermissionDecision) -> Void
+    typealias Reply = (HookReply) -> Void
 
     let path: String
     private let queue = DispatchQueue(label: "kabuk.socket")
@@ -80,12 +80,12 @@ final class SocketServer {
 
     private func makeReply(_ client: Int32) -> Reply {
         var answered = false
-        return { [weak self, queue] decision in
+        return { [weak self, queue] reply in
             queue.async {
                 guard !answered else { return }
                 answered = true
                 self?.waiting.remove(client)
-                let line = Data(#"{"decision":"\#(decision.rawValue)"}"#.utf8 + [UInt8(ascii: "\n")])
+                let line = reply.encodedLine()
                 // The hook may have given up already; a failed write just means nobody is listening.
                 _ = line.withUnsafeBytes { Darwin.write(client, $0.baseAddress, $0.count) }
                 close(client)
