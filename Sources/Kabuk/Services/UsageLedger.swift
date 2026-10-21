@@ -52,23 +52,17 @@ final class UsageLedger: ObservableObject {
 
     var today: Double { book.total(on: UsageBook.day(Date())) }
 
-    /// "Mon $1.20" lines for the last seven days, newest first, plus per-agent totals for today.
-    var summary: String {
-        let calendar = Calendar.current
-        var lines = ["API-equivalent cost of agent sessions in Kabuk.", ""]
-        let todayKey = UsageBook.day(Date())
-        for agent in AgentKind.allCases {
-            let total = book.total(on: todayKey, agent: agent.rawValue)
-            if total > 0 { lines.append("Today, \(agent.displayName): \(Pricing.format(total))") }
+    func today(_ agent: AgentKind) -> Double {
+        book.total(on: UsageBook.day(Date()), agent: agent.rawValue)
+    }
+
+    /// Each agent's spend on the last `count` days, newest first.
+    func days(_ count: Int) -> [(date: Date, byAgent: [AgentKind: Double])] {
+        (0..<count).compactMap { offset in
+            guard let date = Calendar.current.date(byAdding: .day, value: -offset, to: Date()) else { return nil }
+            let key = UsageBook.day(date)
+            let byAgent = Dictionary(uniqueKeysWithValues: AgentKind.allCases.map { ($0, book.total(on: key, agent: $0.rawValue)) })
+            return (date, byAgent)
         }
-        lines.append("")
-        let formatter = DateFormatter()
-        formatter.dateFormat = "EEE d MMM"
-        for offset in 0..<7 {
-            guard let date = calendar.date(byAdding: .day, value: -offset, to: Date()) else { continue }
-            let total = book.total(on: UsageBook.day(date))
-            lines.append("\(formatter.string(from: date)): \(Pricing.format(total))")
-        }
-        return lines.joined(separator: "\n")
     }
 }

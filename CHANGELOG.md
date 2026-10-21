@@ -6,6 +6,11 @@ Changes that are on `main` but not released yet are listed under **Unreleased**.
 
 ## [Unreleased]
 
+### Added
+
+- **Codex cost.** Codex models' API prices are now built in, so Codex sessions count toward today's cost. Until now only Claude was counted, because no Codex model had a price. Codex sessions that ended before this version aren't counted after the fact.
+- **Cost details.** Hover over or click today's cost in the status bar, the same way as the plan limits, to see it split between Claude and Codex, with the last seven days as bars. A note explains that the numbers are API-equivalent: what the tokens would cost at API list prices, not what a Claude or ChatGPT plan bills you.
+
 ## [0.3.2] - 2026-10-21
 
 ### Fixed

@@ -119,7 +119,7 @@ Seven built-in themes (Kabuk, Tokyo Night, Dracula, Nord, Gruvbox, Rosé Pine, S
 
 - **Split panes**: ⌘D and ⇧⌘D. Drag the gap between panes to resize them.
 - **Git badges** for each pane: branch, ahead/behind, `+added −removed` and untracked files.
-- **Cost tracking**: per session in the sidebar, and today's total in the status bar. Hover for the last seven days.
+- **Cost tracking**: per session in the sidebar, and today's total in the status bar. Hover for Claude's and Codex's share and the last seven days.
 - **Plan limits**: how much of the Claude and Codex 5-hour and weekly limits you've used, as dots for the hours and dashes for the days in the status bar. Hover for percentages and reset times.
 - **Notifications and a Dock badge** when an agent finishes or needs you, or a long command ends, while you're looking elsewhere.
 - **Session restore**: sessions, splits and folders come back when you relaunch.
@@ -213,13 +213,13 @@ Drop JSON files into `~/Library/Application Support/Kabuk/themes`. **Open Themes
 
 ### Prices
 
-Claude prices are built in. To price Codex models, or to change any price, add `~/Library/Application Support/Kabuk/pricing.json`. Prices are in USD per million tokens. The numbers below are only an example of the format.
+Claude and Codex model prices are built in, at standard-tier API list prices. To price another model, or to change any price, add `~/Library/Application Support/Kabuk/pricing.json`. Prices are in USD per million tokens. The numbers below are only an example of the format.
 
 ```json
 { "models": { "gpt-5.5-codex": { "input": 1.25, "output": 10, "cacheRead": 0.125 } } }
 ```
 
-The cost is what the same usage would cost on the API. On a Claude or ChatGPT subscription you aren't billed per token.
+The cost is what the same usage would cost on the API. On a Claude or ChatGPT subscription you aren't billed per token. Even on the API it is an estimate: long-context and fast-mode surcharges aren't included, and only sessions run in Kabuk are counted.
 
 ### Files
 

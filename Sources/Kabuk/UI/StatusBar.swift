@@ -58,24 +58,27 @@ private struct UsageRow: View {
     }
 }
 
-/// Today's API-equivalent agent spend; hover for the last seven days.
+/// Today's API-equivalent agent spend; hover or click for each agent's share and the last seven days.
 private struct TodayCost: View {
     @ObservedObject var ledger: UsageLedger
 
     var body: some View {
         let today = ledger.today
         if today > 0 {
-            // Drops the label when the counters next to it need the room.
-            ViewThatFits(in: .horizontal) {
-                chip("Today \(Pricing.format(today))")
-                chip(Pricing.format(today))
+            HoverPopoverButton { showing in
+                // Drops the label when the counters next to it need the room.
+                ViewThatFits(in: .horizontal) {
+                    chip("Today \(Pricing.format(today))", showing: showing)
+                    chip(Pricing.format(today), showing: showing)
+                }
+            } details: {
+                CostPopover(ledger: ledger)
             }
-            .help(ledger.summary)
             .transition(.opacity)
         }
     }
 
-    private func chip(_ text: String) -> some View {
+    private func chip(_ text: String, showing: Bool) -> some View {
         Text(verbatim: text)
             .font(.system(size: 11, weight: .medium).monospacedDigit())
             .foregroundStyle(.white.opacity(0.55))
@@ -83,7 +86,8 @@ private struct TodayCost: View {
             .fixedSize()
             .padding(.horizontal, 7)
             .padding(.vertical, 2)
-            .background(Capsule().fill(Color.white.opacity(0.07)))
+            .background(Capsule().fill(Color.white.opacity(showing ? 0.13 : 0.07)))
+            .contentShape(Capsule())
             .contentTransition(.numericText())
     }
 }
@@ -94,15 +98,11 @@ private struct TodayCost: View {
 /// Hovering or clicking opens the details above; a click keeps them open.
 private struct PlanLimitsChip: View {
     @ObservedObject var ledger: UsageLedger
-    @State private var showing = false
-    @State private var pinned = false
-    @State private var overChip = false
-    @State private var overDetails = false
 
     var body: some View {
         let agents = AgentKind.allCases.filter { ledger.limits[$0] != nil }
         if !agents.isEmpty {
-            Button(action: click) {
+            HoverPopoverButton { showing in
                 // Once a minute, so the current hour moves on and a reset empties the dots while idle.
                 TimelineView(.everyMinute) { context in
                     HStack(spacing: 8) {
@@ -117,22 +117,38 @@ private struct PlanLimitsChip: View {
                 .frame(height: 22)
                 .background(Capsule().fill(Color.white.opacity(showing ? 0.13 : 0.06)))
                 .contentShape(Capsule())
+            } details: {
+                PlanLimitsPopover(ledger: ledger)
             }
+            .transition(.opacity)
+        }
+    }
+}
+
+/// A chip whose details open above it on hover or click; a click keeps them open.
+private struct HoverPopoverButton<Label: View, Details: View>: View {
+    @ViewBuilder var label: (_ showing: Bool) -> Label
+    @ViewBuilder var details: () -> Details
+    @State private var showing = false
+    @State private var pinned = false
+    @State private var overChip = false
+    @State private var overDetails = false
+
+    var body: some View {
+        Button(action: click) { label(showing) }
             .buttonStyle(.plain)
             .onHover { inside in
                 overChip = inside
                 inside ? later(0.25) { if overChip { showing = true } } : closeLater()
             }
             .popover(isPresented: $showing, arrowEdge: .top) {
-                PlanLimitsPopover(ledger: ledger)
+                details()
                     .onHover { inside in
                         overDetails = inside
                         if !inside { closeLater() }
                     }
             }
             .onChange(of: showing) { _, open in if !open { pinned = false } }
-            .transition(.opacity)
-        }
     }
 
     /// Opens and keeps the details; a second click closes them.
@@ -234,6 +250,96 @@ private enum LimitLevel {
         case 90...: return Theme.failure
         case 70...: return Theme.needsYou
         default: return normal
+        }
+    }
+}
+
+/// Today's spend split by agent, the last seven days, and what the numbers mean.
+private struct CostPopover: View {
+    @ObservedObject var ledger: UsageLedger
+
+    private static let dayFormat: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.setLocalizedDateFormatFromTemplate("EEE d MMM")
+        return formatter
+    }()
+
+    var body: some View {
+        let days = ledger.days(7)
+        let today = days.first?.byAgent ?? [:]
+        let total = today.values.reduce(0, +)
+        let peak = days.map { $0.byAgent.values.reduce(0, +) }.max() ?? 0
+        VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 7) {
+                HStack {
+                    Text("Today").font(.system(size: 12, weight: .semibold)).foregroundStyle(.white.opacity(0.9))
+                    Spacer()
+                    Text(verbatim: Pricing.format(total))
+                        .font(.system(size: 12, weight: .semibold).monospacedDigit()).foregroundStyle(.white.opacity(0.9))
+                }
+                ForEach(AgentKind.allCases, id: \.self) { agent in
+                    agentRow(agent, today[agent] ?? 0, share: total > 0 ? (today[agent] ?? 0) / total : 0)
+                }
+            }
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Last 7 days").font(.system(size: 11)).foregroundStyle(.white.opacity(0.8))
+                ForEach(days, id: \.date) { day in
+                    dayRow(day.date, day.byAgent, peak: peak)
+                }
+            }
+            VStack(alignment: .leading, spacing: 5) {
+                Text("API-equivalent: what these tokens would cost at API list prices. On a Claude or ChatGPT plan you pay for the plan, not this; the plan limits are what you actually use up.")
+                Text(verbatim: "Counts agent sessions run in Kabuk only. Prices as of \(Pricing.pricesAsOf); long-context and fast-mode surcharges aren't included. Override them in pricing.json.")
+            }
+            .font(.system(size: 10))
+            .foregroundStyle(Theme.dim)
+            .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(14)
+        .frame(width: 250)
+    }
+
+    private func agentRow(_ agent: AgentKind, _ cost: Double, share: Double) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            HStack {
+                Text(agent.displayName).font(.system(size: 11)).foregroundStyle(agent.tint)
+                Spacer()
+                Text(verbatim: cost > 0 ? Pricing.format(cost) : "—")
+                    .font(.system(size: 11, weight: .semibold).monospacedDigit())
+                    .foregroundStyle(.white.opacity(0.85))
+            }
+            GeometryReader { proxy in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(Color.white.opacity(0.1))
+                    Capsule().fill(agent.tint).frame(width: proxy.size.width * share)
+                }
+            }
+            .frame(height: 4)
+        }
+    }
+
+    /// The day's spend as one bar, split by agent, scaled to the week's biggest day.
+    private func dayRow(_ date: Date, _ byAgent: [AgentKind: Double], peak: Double) -> some View {
+        let total = byAgent.values.reduce(0, +)
+        return HStack(spacing: 8) {
+            Text(verbatim: Self.dayFormat.string(from: date))
+                .font(.system(size: 10)).foregroundStyle(Theme.dim)
+                .frame(width: 72, alignment: .leading)
+            GeometryReader { proxy in
+                HStack(spacing: 0) {
+                    ForEach(AgentKind.allCases, id: \.self) { agent in
+                        Rectangle()
+                            .fill(agent.tint)
+                            .frame(width: peak > 0 ? proxy.size.width * (byAgent[agent] ?? 0) / peak : 0)
+                    }
+                }
+                .clipShape(Capsule())
+                .frame(maxHeight: .infinity)
+            }
+            .frame(height: 4)
+            Text(verbatim: total > 0 ? Pricing.format(total) : "—")
+                .font(.system(size: 10, weight: .medium).monospacedDigit()).foregroundStyle(.white.opacity(0.75))
+                .frame(width: 50, alignment: .trailing)
         }
     }
 }

@@ -11,7 +11,20 @@ final class PricingTests: XCTestCase {
         XCTAssertEqual(pricing.price(for: "claude-fable-5-1")?.cacheRead, 0.25)
         XCTAssertEqual(pricing.price(for: "claude-fable-5")?.cacheRead, 1)
         XCTAssertEqual(pricing.price(for: "claude-sonnet-4-6")?.cacheRead ?? 0, 0.3, accuracy: 1e-9)
-        XCTAssertNil(pricing.price(for: "gpt-6.1-sol"))
+        // "gpt-6-sol" must not swallow "gpt-6.1-sol".
+        XCTAssertEqual(pricing.price(for: "gpt-6.1-sol")?.cacheRead ?? 0, 0.10, accuracy: 1e-9)
+        XCTAssertEqual(pricing.price(for: "gpt-6-sol")?.cacheRead ?? 0, 0.20, accuracy: 1e-9)
+        XCTAssertEqual(pricing.price(for: "gpt-5.6-terra")?.output, 12)
+        XCTAssertNil(pricing.price(for: "gpt-4o"))
+    }
+
+    func testCodexCost() {
+        // Shaped like a Codex rollout's running totals: cached input is split out of input.
+        let usage = TokenUsage(context: 0, output: 0, byModel: [
+            "gpt-5.6-terra": TokenBreakdown(input: 1_000_000, cacheRead: 2_000_000, output: 100_000),
+        ])
+        // 2 + 0.4 + 1.2
+        XCTAssertEqual(Pricing().cost(usage) ?? 0, 3.6, accuracy: 1e-9)
     }
 
     func testCost() {
@@ -33,7 +46,7 @@ final class PricingTests: XCTestCase {
 
     func testOverrides() throws {
         let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".json")
-        try #"{"models":{"gpt-6.1":{"input":1.5,"output":6,"cacheRead":0.15},"claude-opus-5-5":{"input":1,"output":2}}}"#
+        try #"{"models":{"gpt-6.1-sol":{"input":1.5,"output":6,"cacheRead":0.15},"claude-opus-5-5":{"input":1,"output":2}}}"#
             .write(to: url, atomically: true, encoding: .utf8)
         defer { try? FileManager.default.removeItem(at: url) }
         let pricing = Pricing.load(overrides: url)

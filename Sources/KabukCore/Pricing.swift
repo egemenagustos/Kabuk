@@ -61,7 +61,24 @@ public struct Pricing: Sendable {
         "claude-haiku-4-5": ModelPrice(input: 1, output: 5),
     ]
 
-    public init(models: [String: ModelPrice] = Pricing.anthropic) {
+    /// OpenAI API prices for Codex (standard tier, up to 272K input; cached 2026-10-21). OpenAI
+    /// doesn't charge for cache writes, and reasoning tokens are already counted in output.
+    /// Long-context and Fast tier surcharges aren't modelled.
+    public static let openai: [String: ModelPrice] = [
+        "gpt-6-astra": ModelPrice(input: 10, output: 50, cacheRead: 1),
+        "gpt-6.1-sol": ModelPrice(input: 2, output: 10, cacheRead: 0.10),
+        "gpt-6-sol": ModelPrice(input: 2, output: 10, cacheRead: 0.20),
+        "gpt-6-luna": ModelPrice(input: 0.10, output: 0.50, cacheRead: 0.01),
+        // Promotional price, guaranteed through 2026-11-21.
+        "gpt-5.6-sol": ModelPrice(input: 4, output: 20, cacheRead: 0.40),
+        "gpt-5.6-terra": ModelPrice(input: 2, output: 12, cacheRead: 0.20),
+        "gpt-5.6-luna": ModelPrice(input: 0.20, output: 1.20, cacheRead: 0.02),
+    ]
+
+    /// The date the built-in prices were checked, shown next to costs.
+    public static let pricesAsOf = "21 Oct 2026"
+
+    public init(models: [String: ModelPrice] = Pricing.anthropic.merging(Pricing.openai) { a, _ in a }) {
         self.models = models
     }
 
