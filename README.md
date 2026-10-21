@@ -29,10 +29,9 @@ Kabuk (Turkish for *shell*) is a glassy, dark terminal that knows when Claude Co
 ## What's new
 
 <!-- whats-new:start -->
-**0.3.0** (2026-10-21):
+**0.3.1** (2026-10-21):
 
-- Added: **Plan limits in the status bar.** How much of your Claude and Codex plans' 5-hour and weekly limits you've used, next to today's cost. Each agent gets five dots for the hours of its 5-hour window and seven dashes for the days of its week, filled as far as the limit is used. A ring breathes around the current hour, so dots filled past it mean you'll hit the limit before it resets. Hover or click for the details: percentages, when each window resets, and an even-pace mark on each bar. Claude's numbers come from Claude Code's status line, Codex's from its session files after each turn.
-- Changed: The Claude Code integration now also sets a status line command, to pass the plan limits to Kabuk. If you already had a status line, Kabuk runs it as before and puts it back when the integration is removed. Kabuk offers to update an existing integration.
+- Fixed: Codex plan limits now show on ChatGPT's free plan, which has a single 30-day window instead of a 5-hour and a weekly one. Kabuk shows it on the long bar and labels it "30-day".
 
 See **[CHANGELOG.md](CHANGELOG.md)** for every version and what is on `main` but not released yet.
 <!-- whats-new:end -->

@@ -6,6 +6,8 @@ Changes that are on `main` but not released yet are listed under **Unreleased**.
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-10-21
+
 ### Fixed
 
 - Codex plan limits now show on ChatGPT's free plan, which has a single 30-day window instead of a 5-hour and a weekly one. Kabuk shows it on the long bar and labels it "30-day".
@@ -61,7 +63,8 @@ The first release.
 - Seven themes plus your own JSON themes, three transparency levels, Liquid Glass on macOS 26.
 - Split panes, git badges, cost tracking, notifications, a Dock badge and session restore.
 
-[Unreleased]: https://github.com/egemenagustos/Kabuk/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/egemenagustos/Kabuk/compare/v0.3.1...HEAD
+[0.3.1]: https://github.com/egemenagustos/Kabuk/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/egemenagustos/Kabuk/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/egemenagustos/Kabuk/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/egemenagustos/Kabuk/releases/tag/v0.1.0
