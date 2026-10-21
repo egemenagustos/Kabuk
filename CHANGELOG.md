@@ -6,6 +6,8 @@ Changes that are on `main` but not released yet are listed under **Unreleased**.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-21
+
 ### Added
 
 - **Undo a turn.** The turn card has an Undo button that puts every file the agent changed back the way it was before the turn, untracked files included, and moves the branch back if the agent committed. Redo brings the changes back.
@@ -45,5 +47,6 @@ The first release.
 - Seven themes plus your own JSON themes, three transparency levels, Liquid Glass on macOS 26.
 - Split panes, git badges, cost tracking, notifications, a Dock badge and session restore.
 
-[Unreleased]: https://github.com/egemenagustos/Kabuk/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/egemenagustos/Kabuk/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/egemenagustos/Kabuk/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/egemenagustos/Kabuk/releases/tag/v0.1.0
