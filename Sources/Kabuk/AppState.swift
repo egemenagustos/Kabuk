@@ -50,6 +50,8 @@ final class AppState: ObservableObject {
     @Published var historyVisible = false
     /// What each pane's agent changed in its last turn.
     @Published private(set) var turnChanges: [UUID: TurnChange] = [:]
+    /// Turns the user undid, with what it takes to redo them.
+    @Published private(set) var undoneTurns: [UUID: UndoneTurn] = [:]
     /// Panes whose turn summary card is open rather than folded into the header.
     @Published var expandedTurnCards: Set<UUID> = []
     /// The file whose turn diff is on screen.
@@ -663,6 +665,7 @@ final class AppState: ObservableObject {
         guard session(containing: paneID) != nil else { return }
         withAnimation(.spring(response: 0.45, dampingFraction: 0.8)) {
             turnChanges[paneID] = change
+            undoneTurns[paneID] = nil
             if change != nil { expandedTurnCards.insert(paneID) }
         }
         guard change != nil else { return }
@@ -684,6 +687,56 @@ final class AppState: ObservableObject {
         withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
             turnChanges[paneID] = nil
             expandedTurnCards.remove(paneID)
+        }
+    }
+
+    /// Puts back the files the agent's last turn changed, after asking.
+    func undoTurn(_ paneID: UUID, confirm: Bool = true) {
+        guard let change = turnChanges[paneID], undoneTurns[paneID] == nil else { return }
+        guard confirm else {
+            runUndo(paneID, change) { TurnTracker.undo(change).map { $0 } }
+            return
+        }
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let commits = TurnTracker.commitsSince(change)
+            DispatchQueue.main.async {
+                guard let self, self.turnChanges[paneID] == change else { return }
+                let alert = NSAlert()
+                alert.messageText = "Undo the last turn?"
+                alert.informativeText = "These files go back to how they were before the turn:\n\n" + TurnUndo.summary(change, commits: commits)
+                    + "\n\nYou can redo it from the same card."
+                alert.addButton(withTitle: "Undo Turn")
+                alert.addButton(withTitle: "Cancel")
+                guard alert.runModal() == .alertFirstButtonReturn else { return }
+                self.runUndo(paneID, change) { TurnTracker.undo(change).map { $0 } }
+            }
+        }
+    }
+
+    func redoTurn(_ paneID: UUID) {
+        guard let change = turnChanges[paneID], let undone = undoneTurns[paneID] else { return }
+        runUndo(paneID, change) {
+            TurnTracker.redo(change, undone).map { .failure($0) } ?? .success(nil)
+        }
+    }
+
+    /// Runs an undo (which yields what redo needs) or a redo (which yields nil) off the main thread.
+    private func runUndo(_ paneID: UUID, _ change: TurnChange, _ work: @escaping @Sendable () -> Result<UndoneTurn?, TurnUndoFailure>) {
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let result = work()
+            DispatchQueue.main.async {
+                guard let self else { return }
+                switch result {
+                case .failure(let failure):
+                    Self.alert("Couldn't undo the turn", failure.localizedDescription)
+                case .success(let undone):
+                    guard self.turnChanges[paneID] == change else { return }
+                    withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) { self.undoneTurns[paneID] = undone }
+                }
+                if let pane = self.session(containing: paneID)?.root.panes.first(where: { $0.id == paneID }) {
+                    self.git.refresh(paneID, cwd: self.runtime(pane).cwd, delay: 0.05)
+                }
+            }
         }
     }
 

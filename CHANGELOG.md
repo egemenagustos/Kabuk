@@ -6,6 +6,10 @@ Changes that are on `main` but not released yet are listed under **Unreleased**.
 
 ## [Unreleased]
 
+### Added
+
+- **Undo a turn.** The turn card has an Undo button that puts every file the agent changed back the way it was before the turn, untracked files included, and moves the branch back if the agent committed. Redo brings the changes back.
+
 ### Changed
 
 - Status indicators animate with Core Animation instead of SwiftUI timelines, which cuts idle CPU use.

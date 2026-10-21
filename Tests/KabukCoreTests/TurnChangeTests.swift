@@ -27,6 +27,29 @@ final class TurnChangeTests: XCTestCase {
         XCTAssertEqual(change.base, "abc")
     }
 
+    func testUndoRestoresWhatTheSnapshotHoldsAndDeletesTheRest() {
+        let steps = TurnUndo.steps(paths: ["snake.mjs", "scores.json", "gone.txt"], inSnapshot: ["snake.mjs", "gone.txt"])
+        XCTAssertEqual(steps, [.restore("snake.mjs"), .delete("scores.json"), .restore("gone.txt")])
+    }
+
+    func testUndoSummary() {
+        let files = (1...10).map { FileChange(path: "f\($0).swift", added: 1, removed: 0) }
+        let change = TurnChange(files: files, base: "b", top: "/r", snapshot: "s", head: "h")
+        let text = TurnUndo.summary(change, commits: 2)
+        XCTAssertTrue(text.hasPrefix("• f1.swift\n"))
+        XCTAssertTrue(text.contains("and 2 more"))
+        XCTAssertFalse(text.contains("f9.swift"))
+        XCTAssertTrue(text.contains("2 commits"))
+        XCTAssertFalse(TurnUndo.summary(change, commits: 0).contains("commit"))
+    }
+
+    func testBaselineCarriesItsSnapshot() {
+        let before = TurnBaseline(base: "abc", top: "/repo", untracked: [:], snapshot: "snap", head: "head")
+        let change = TurnDiff.change(numstat: "1\t0\ta\n", before: before, untrackedAfter: [:], lineCount: { _ in nil })
+        XCTAssertEqual(change.snapshot, "snap")
+        XCTAssertEqual(change.head, "head")
+    }
+
     func testDiffClassification() {
         let diff = """
         diff --git a/x b/x

@@ -11,6 +11,7 @@ import SwiftUI
 ///   dev.kabuk.theme (object)     switches to the theme with that id
 ///   dev.kabuk.answer (object)   answers the first held permission request: allow, deny, always, ask
 ///   dev.kabuk.showdiff (object) opens the diff of that file (or the first) in any turn summary
+///   dev.kabuk.undo (object)     "undo" or "redo" for the first pane with a turn summary, without asking
 ///   dev.kabuk.failure           writes <dir>/failure.txt: each pane's captured failure and its prompt
 ///   dev.kabuk.ask (object)      asks claude or codex about the first captured failure
 ///   dev.kabuk.dump              writes <dir>/focus.txt: the focused pane and the first responder
@@ -144,6 +145,12 @@ enum DebugHooks {
                     state.showDiff(file, of: pane)
                     return
                 }
+            }
+        }
+        center.addObserver(forName: .init("dev.kabuk.undo"), object: nil, queue: .main) { note in
+            MainActor.assumeIsolated {
+                guard let pane = state.turnChanges.keys.first else { return }
+                if note.object as? String == "redo" { state.redoTurn(pane) } else { state.undoTurn(pane, confirm: false) }
             }
         }
         center.addObserver(forName: .init("dev.kabuk.failure"), object: nil, queue: .main) { _ in

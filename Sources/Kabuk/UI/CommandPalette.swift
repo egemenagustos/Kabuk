@@ -147,6 +147,14 @@ struct CommandPalette: View {
                 IntegrationUI.uninstall()
             },
         ]
+        if let pane = s.selectedSession?.focusedPane, let change = s.turnChanges[pane], change.snapshot != nil {
+            let undone = s.undoneTurns[pane] != nil
+            items.append(Item(id: "undo-turn", title: undone ? "Redo Last Turn" : "Undo Last Turn",
+                              subtitle: "\(change.files.count) file\(change.files.count == 1 ? "" : "s")",
+                              symbol: undone ? "arrow.uturn.forward" : "arrow.uturn.backward", status: nil) {
+                if undone { s.redoTurn(pane) } else { s.undoTurn(pane) }
+            })
+        }
         let symbols = ["circle.dotted", "circle.lefthalf.filled", "circle.fill"]
         items += WorkspaceSnapshot.transparencyLevels.enumerated().map { index, level in
             Item(id: "glass-\(index)", title: "Transparency: \(level.name)", subtitle: s.opacity == level.value ? "current" : "",

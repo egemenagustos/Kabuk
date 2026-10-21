@@ -26,12 +26,19 @@ public struct TurnChange: Equatable, Sendable {
     /// The working tree's top-level folder; file paths are relative to it.
     public var top: String
     public var finishedAt: Date
+    /// The whole working tree at the start of the turn, untracked files included; undo restores it.
+    public var snapshot: String?
+    /// HEAD at the start of the turn; it moves when the agent commits.
+    public var head: String?
 
-    public init(files: [FileChange], base: String, top: String, finishedAt: Date = Date()) {
+    public init(files: [FileChange], base: String, top: String, finishedAt: Date = Date(), snapshot: String? = nil,
+                head: String? = nil) {
         self.files = files
         self.base = base
         self.top = top
         self.finishedAt = finishedAt
+        self.snapshot = snapshot
+        self.head = head
     }
 
     public var added: Int { files.reduce(0) { $0 + ($1.added ?? 0) } }
@@ -44,11 +51,15 @@ public struct TurnBaseline: Sendable {
     public var top: String
     /// Untracked files and their modification dates; `git stash create` doesn't cover them.
     public var untracked: [String: Date]
+    public var snapshot: String?
+    public var head: String?
 
-    public init(base: String, top: String, untracked: [String: Date]) {
+    public init(base: String, top: String, untracked: [String: Date], snapshot: String? = nil, head: String? = nil) {
         self.base = base
         self.top = top
         self.untracked = untracked
+        self.snapshot = snapshot
+        self.head = head
     }
 }
 
@@ -74,7 +85,33 @@ public enum TurnDiff {
                 files.append(FileChange(path: path, added: lineCount(path), removed: 0, isNew: true))
             }
         }
-        return TurnChange(files: files, base: before.base, top: before.top, finishedAt: now)
+        return TurnChange(files: files, base: before.base, top: before.top, finishedAt: now, snapshot: before.snapshot,
+                          head: before.head)
+    }
+}
+
+/// Puts files back the way a snapshot has them: what the snapshot holds is restored, what it
+/// doesn't hold didn't exist then and is deleted. Undo uses the turn's starting snapshot, redo
+/// the one taken just before the undo.
+public enum TurnUndo {
+    public enum Step: Equatable, Sendable {
+        case restore(String)
+        case delete(String)
+    }
+
+    public static func steps(paths: [String], inSnapshot: Set<String>) -> [Step] {
+        paths.map { inSnapshot.contains($0) ? .restore($0) : .delete($0) }
+    }
+
+    /// "Undo the last turn?" text: the files, a few of them by name, and the commits that go too.
+    public static func summary(_ change: TurnChange, commits: Int, limit: Int = 8) -> String {
+        var lines = change.files.prefix(limit).map { "• " + $0.path }
+        if change.files.count > limit { lines.append("and \(change.files.count - limit) more") }
+        var text = lines.joined(separator: "\n")
+        if commits > 0 {
+            text += "\n\nThe agent also made \(commits) commit\(commits == 1 ? "" : "s"). The branch moves back to where the turn started; the commits stay reachable with git reflog."
+        }
+        return text
     }
 }
 

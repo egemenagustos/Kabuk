@@ -8,14 +8,22 @@ struct TurnCard: View {
     let change: TurnChange
 
     var body: some View {
+        let undone = state.undoneTurns[paneID] != nil
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 8) {
-                Image(systemName: "sparkles").font(.system(size: 11, weight: .semibold)).foregroundStyle(Theme.claude)
-                Text("This turn").font(.system(size: 12, weight: .semibold))
+                Image(systemName: undone ? "arrow.uturn.backward" : "sparkles").font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(undone ? .white.opacity(0.5) : Theme.claude)
+                Text(undone ? "Turn undone" : "This turn").font(.system(size: 12, weight: .semibold))
                 Text(verbatim: "\(change.files.count) file\(change.files.count == 1 ? "" : "s")")
                     .font(.system(size: 11)).foregroundStyle(.white.opacity(0.5))
                 DiffCounts(added: change.added, removed: change.removed)
+                    .opacity(undone ? 0.4 : 1)
                 Spacer()
+                if change.snapshot != nil {
+                    UndoButton(undone: undone, busy: state.runtimes[paneID]?.status.isBusy ?? false) {
+                        if undone { state.redoTurn(paneID) } else { state.undoTurn(paneID) }
+                    }
+                }
                 IconButton(symbol: "chevron.down", size: 9, help: "Fold") { state.toggleTurnCard(paneID) }
                 IconButton(symbol: "xmark", size: 9, help: "Dismiss") { state.dismissTurnChange(paneID) }
             }
@@ -40,6 +48,31 @@ struct TurnCard: View {
         .glass(in: RoundedRectangle(cornerRadius: 12, style: .continuous), tint: .black.opacity(0.3))
         .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Color.white.opacity(0.1)))
         .shadow(color: .black.opacity(0.4), radius: 16, y: 8)
+    }
+}
+
+/// "Undo" while the turn's changes are in place, "Redo" once they're undone.
+private struct UndoButton: View {
+    let undone: Bool
+    let busy: Bool
+    let action: () -> Void
+    @State private var hovering = false
+
+    var body: some View {
+        Button(action: action) {
+            Label(undone ? "Redo" : "Undo", systemImage: undone ? "arrow.uturn.forward" : "arrow.uturn.backward")
+                .font(.system(size: 10.5, weight: .semibold))
+                .lineLimit(1)
+                .fixedSize()
+                .foregroundStyle(.white.opacity(busy ? 0.3 : hovering ? 0.95 : 0.7))
+                .padding(.horizontal, 8)
+                .padding(.vertical, 3)
+                .background(Capsule().fill(Color.white.opacity(hovering && !busy ? 0.14 : 0.08)))
+        }
+        .buttonStyle(.plain)
+        .disabled(busy)
+        .onHover { hovering = $0 }
+        .help(busy ? "Wait for the agent to finish" : undone ? "Put the turn's changes back" : "Put these files back as they were before the turn")
     }
 }
 
