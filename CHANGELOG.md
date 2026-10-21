@@ -6,6 +6,8 @@ Changes that are on `main` but not released yet are listed under **Unreleased**.
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-10-21
+
 ### Fixed
 
 - The skill picker opens with its whole list the first time. The skills were scanned only when it opened, so the first time it opened empty and too small, and the list that arrived a moment later was cut off. Kabuk now scans an agent's skills as soon as the agent starts in a pane, and the picker keeps one height as its list grows or a search narrows it.
@@ -87,7 +89,8 @@ The first release.
 - Seven themes plus your own JSON themes, three transparency levels, Liquid Glass on macOS 26.
 - Split panes, git badges, cost tracking, notifications, a Dock badge and session restore.
 
-[Unreleased]: https://github.com/egemenagustos/Kabuk/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/egemenagustos/Kabuk/compare/v0.5.1...HEAD
+[0.5.1]: https://github.com/egemenagustos/Kabuk/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/egemenagustos/Kabuk/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/egemenagustos/Kabuk/compare/v0.3.2...v0.4.0
 [0.3.2]: https://github.com/egemenagustos/Kabuk/compare/v0.3.1...v0.3.2

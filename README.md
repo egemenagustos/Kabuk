@@ -29,9 +29,9 @@ Kabuk (Turkish for *shell*) is a glassy, dark terminal that knows when Claude Co
 ## What's new
 
 <!-- whats-new:start -->
-**0.5.0** (2026-10-21):
+**0.5.1** (2026-10-21):
 
-- Added: **Skills.** A button in an agent pane's header lists the skills that agent can load, from the user's, the project's, plugins, claude.ai (Claude) and the built-in ones (Codex). Choosing one types `/name` for Claude or `$name` for Codex at the prompt without sending it, so the request can follow. In the palette, start with `/` or `$` to search only skills. Right-click a skill to open its SKILL.md.
+- Fixed: The skill picker opens with its whole list the first time. The skills were scanned only when it opened, so the first time it opened empty and too small, and the list that arrived a moment later was cut off. Kabuk now scans an agent's skills as soon as the agent starts in a pane, and the picker keeps one height as its list grows or a search narrows it.
 
 See **[CHANGELOG.md](CHANGELOG.md)** for every version and what is on `main` but not released yet.
 <!-- whats-new:end -->
