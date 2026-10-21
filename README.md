@@ -29,9 +29,10 @@ Kabuk (Turkish for *shell*) is a glassy, dark terminal that knows when Claude Co
 ## What's new
 
 <!-- whats-new:start -->
-**0.3.1** (2026-10-21):
+**0.3.2** (2026-10-21):
 
-- Fixed: Codex plan limits now show on ChatGPT's free plan, which has a single 30-day window instead of a 5-hour and a weekly one. Kabuk shows it on the long bar and labels it "30-day".
+- Fixed: Codex plan limits and turn updates reach Kabuk again. Codex now runs its turns on one shared background server, started from whichever terminal opened Codex first, so its turn notices went to that terminal's pane, or nowhere. Inside Kabuk, `codex` now keeps its own server (`--no-daemon`), and each turn reports from the pane it runs in. `codex agents`, which needs the shared server, runs as before.
+- Fixed: The sidebar no longer spills over its left and right edges. Plan limits, today's cost, the shortcuts and the counters didn't fit on one line, so the status bar now puts the limits and the cost on a row of their own.
 
 See **[CHANGELOG.md](CHANGELOG.md)** for every version and what is on `main` but not released yet.
 <!-- whats-new:end -->

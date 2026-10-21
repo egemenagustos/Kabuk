@@ -6,6 +6,8 @@ Changes that are on `main` but not released yet are listed under **Unreleased**.
 
 ## [Unreleased]
 
+## [0.3.2] - 2026-10-21
+
 ### Fixed
 
 - Codex plan limits and turn updates reach Kabuk again. Codex now runs its turns on one shared background server, started from whichever terminal opened Codex first, so its turn notices went to that terminal's pane, or nowhere. Inside Kabuk, `codex` now keeps its own server (`--no-daemon`), and each turn reports from the pane it runs in. `codex agents`, which needs the shared server, runs as before.
@@ -68,7 +70,8 @@ The first release.
 - Seven themes plus your own JSON themes, three transparency levels, Liquid Glass on macOS 26.
 - Split panes, git badges, cost tracking, notifications, a Dock badge and session restore.
 
-[Unreleased]: https://github.com/egemenagustos/Kabuk/compare/v0.3.1...HEAD
+[Unreleased]: https://github.com/egemenagustos/Kabuk/compare/v0.3.2...HEAD
+[0.3.2]: https://github.com/egemenagustos/Kabuk/compare/v0.3.1...v0.3.2
 [0.3.1]: https://github.com/egemenagustos/Kabuk/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/egemenagustos/Kabuk/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/egemenagustos/Kabuk/compare/v0.1.0...v0.2.0
