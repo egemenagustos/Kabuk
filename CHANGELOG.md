@@ -6,6 +6,8 @@ Changes that are on `main` but not released yet are listed under **Unreleased**.
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-10-21
+
 ### Added
 
 - **Skills.** A button in an agent pane's header lists the skills that agent can load, from the user's, the project's, plugins, claude.ai (Claude) and the built-in ones (Codex). Choosing one types `/name` for Claude or `$name` for Codex at the prompt without sending it, so the request can follow. In the palette, start with `/` or `$` to search only skills. Right-click a skill to open its SKILL.md.
@@ -81,7 +83,8 @@ The first release.
 - Seven themes plus your own JSON themes, three transparency levels, Liquid Glass on macOS 26.
 - Split panes, git badges, cost tracking, notifications, a Dock badge and session restore.
 
-[Unreleased]: https://github.com/egemenagustos/Kabuk/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/egemenagustos/Kabuk/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/egemenagustos/Kabuk/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/egemenagustos/Kabuk/compare/v0.3.2...v0.4.0
 [0.3.2]: https://github.com/egemenagustos/Kabuk/compare/v0.3.1...v0.3.2
 [0.3.1]: https://github.com/egemenagustos/Kabuk/compare/v0.3.0...v0.3.1

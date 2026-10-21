@@ -29,10 +29,9 @@ Kabuk (Turkish for *shell*) is a glassy, dark terminal that knows when Claude Co
 ## What's new
 
 <!-- whats-new:start -->
-**0.4.0** (2026-10-21):
+**0.5.0** (2026-10-21):
 
-- Added: **Codex cost.** Codex models' API prices are now built in, so Codex sessions count toward today's cost. Until now only Claude was counted, because no Codex model had a price. Codex sessions that ended before this version aren't counted after the fact.
-- Added: **Cost details.** Hover over or click today's cost in the status bar, the same way as the plan limits, to see it split between Claude and Codex, with the last seven days as bars. A note explains that the numbers are API-equivalent: what the tokens would cost at API list prices, not what a Claude or ChatGPT plan bills you.
+- Added: **Skills.** A button in an agent pane's header lists the skills that agent can load, from the user's, the project's, plugins, claude.ai (Claude) and the built-in ones (Codex). Choosing one types `/name` for Claude or `$name` for Codex at the prompt without sending it, so the request can follow. In the palette, start with `/` or `$` to search only skills. Right-click a skill to open its SKILL.md.
 
 See **[CHANGELOG.md](CHANGELOG.md)** for every version and what is on `main` but not released yet.
 <!-- whats-new:end -->
