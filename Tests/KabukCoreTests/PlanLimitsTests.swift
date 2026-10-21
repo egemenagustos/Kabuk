@@ -50,6 +50,18 @@ final class PlanLimitsTests: XCTestCase {
         XCTAssertEqual(limits.weekly?.usedPercent, 8)
     }
 
+    func testCodexFreePlanHasOneLongWindow() throws {
+        let rollout = """
+        {"type":"event_msg","payload":{"type":"token_count","info":{},"rate_limits":{"limit_id":"codex",\
+        "primary":{"used_percent":3.0,"window_minutes":43200,"resets_at":1795099054},"secondary":null,"plan_type":"free"}}}
+        """
+        let limits = try XCTUnwrap(PlanLimits.fromCodexRollout(Data(rollout.utf8), now: now))
+        XCTAssertNil(limits.fiveHour)
+        XCTAssertEqual(limits.weekly, LimitWindow(usedPercent: 3, resetsAt: Date(timeIntervalSince1970: 1_795_099_054), length: 30 * 86400))
+        XCTAssertEqual(limits.current(at: Date(timeIntervalSince1970: 1_795_100_000)).weekly?.length, 30 * 86400,
+                       "a reset keeps the window's length")
+    }
+
     func testCodexRolloutWithoutLimits() {
         let rollout = #"{"type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{}}}}"#
         XCTAssertNil(PlanLimits.fromCodexRollout(Data(rollout.utf8)))

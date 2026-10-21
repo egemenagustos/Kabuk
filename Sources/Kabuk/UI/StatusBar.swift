@@ -160,7 +160,7 @@ private struct LimitClock: View {
 
     private var hours: some View {
         let used = limits.fiveHour?.usedPercent ?? 0
-        let current = limits.fiveHour?.elapsed(of: PlanLimits.fiveHourLength, at: now).map { min(Int($0 * 5), 4) }
+        let current = limits.fiveHour.flatMap { $0.elapsed(of: $0.length ?? PlanLimits.fiveHourLength, at: now) }.map { min(Int($0 * 5), 4) }
         return HStack(spacing: Self.dotGap) {
             ForEach(0..<5, id: \.self) { hour in
                 Circle()
@@ -184,7 +184,7 @@ private struct LimitClock: View {
 
     private var days: some View {
         let used = limits.weekly?.usedPercent ?? 0
-        let today = limits.weekly?.elapsed(of: PlanLimits.weeklyLength, at: now).map { min(Int($0 * 7), 6) }
+        let today = limits.weekly.flatMap { $0.elapsed(of: $0.length ?? PlanLimits.weeklyLength, at: now) }.map { min(Int($0 * 7), 6) }
         let gap: CGFloat = 1.5
         let dash = (Self.width - 6 * gap) / 7
         return HStack(spacing: gap) {
@@ -249,14 +249,15 @@ private struct PlanLimitsPopover: View {
                 Text(verbatim: "updated \(Self.ago(now.timeIntervalSince(updated)))")
                     .font(.system(size: 10)).foregroundStyle(Theme.dim)
             }
-            row("5-hour", limits.fiveHour, length: PlanLimits.fiveHourLength, tint: agent.tint, now: now)
-            row("Weekly", limits.weekly, length: PlanLimits.weeklyLength, tint: agent.tint, now: now)
+            row(limits.fiveHour, length: limits.fiveHour?.length ?? PlanLimits.fiveHourLength, tint: agent.tint, now: now)
+            row(limits.weekly, length: limits.weekly?.length ?? PlanLimits.weeklyLength, tint: agent.tint, now: now)
         }
     }
 
     @ViewBuilder
-    private func row(_ title: String, _ window: LimitWindow?, length: TimeInterval, tint: Color, now: Date) -> some View {
+    private func row(_ window: LimitWindow?, length: TimeInterval, tint: Color, now: Date) -> some View {
         if let window {
+            let title = Self.title(length)
             VStack(alignment: .leading, spacing: 3) {
                 HStack {
                     Text(title).font(.system(size: 11)).foregroundStyle(.white.opacity(0.8))
@@ -288,6 +289,13 @@ private struct PlanLimitsPopover: View {
                 }
             }
         }
+    }
+
+    /// 5-hour, Weekly, 30-day.
+    static func title(_ length: TimeInterval) -> String {
+        let hours = Int((length / 3600).rounded())
+        if hours < 24 { return "\(hours)-hour" }
+        return hours == 168 ? "Weekly" : "\(hours / 24)-day"
     }
 
     /// "14:20" today, "Mon 09:00" later in the week.

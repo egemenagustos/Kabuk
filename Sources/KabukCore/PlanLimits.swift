@@ -5,10 +5,14 @@ public struct LimitWindow: Codable, Equatable, Sendable {
     /// 0–100, above 100 once the limit is exceeded.
     public var usedPercent: Double
     public var resetsAt: Date?
+    /// The window's length, when the agent says it. Codex's free plan has one 30-day window
+    /// instead of a 5-hour and a weekly one.
+    public var length: TimeInterval?
 
-    public init(usedPercent: Double, resetsAt: Date? = nil) {
+    public init(usedPercent: Double, resetsAt: Date? = nil, length: TimeInterval? = nil) {
         self.usedPercent = usedPercent
         self.resetsAt = resetsAt
+        self.length = length
     }
 
     /// How far through a window of this length the clock is, 0…1. Usage ahead of it runs out
@@ -21,7 +25,9 @@ public struct LimitWindow: Codable, Equatable, Sendable {
 
 /// How much of the plan's 5-hour and weekly limits an agent has used.
 public struct PlanLimits: Codable, Equatable, Sendable {
+    /// The short window: 5 hours, or another length under a day.
     public var fiveHour: LimitWindow?
+    /// The long window: a week, or another length over a day.
     public var weekly: LimitWindow?
     public var updatedAt: Date
 
@@ -38,7 +44,7 @@ public struct PlanLimits: Codable, Equatable, Sendable {
     public func current(at now: Date = Date()) -> PlanLimits {
         func fresh(_ window: LimitWindow?) -> LimitWindow? {
             guard let window, let resetsAt = window.resetsAt, resetsAt <= now else { return window }
-            return LimitWindow(usedPercent: 0, resetsAt: nil)
+            return LimitWindow(usedPercent: 0, resetsAt: nil, length: window.length)
         }
         return PlanLimits(fiveHour: fresh(fiveHour), weekly: fresh(weekly), updatedAt: updatedAt)
     }
@@ -62,7 +68,8 @@ public struct PlanLimits: Codable, Equatable, Sendable {
     }
 
     /// Reads a Codex rollout (JSONL); the last `token_count` event carrying `rate_limits` has the
-    /// plan's windows as `primary` and `secondary`, told apart by `window_minutes`.
+    /// plan's windows as `primary` and `secondary`, told apart by `window_minutes`: 300 and 10080
+    /// on paid plans, a single 43200 on the free one.
     public static func fromCodexRollout(_ data: Data, now: Date = Date()) -> PlanLimits? {
         let marker = Data(#""rate_limits""#.utf8)
         for line in data.split(separator: UInt8(ascii: "\n")).reversed() where line.range(of: marker) != nil {
@@ -72,13 +79,11 @@ public struct PlanLimits: Codable, Equatable, Sendable {
                   let limits = payload["rate_limits"] as? [String: Any] else { continue }
             var result = PlanLimits(updatedAt: now)
             for key in ["primary", "secondary"] {
-                guard let entry = limits[key] as? [String: Any], let used = double(entry["used_percent"]) else { continue }
-                let window = LimitWindow(usedPercent: used, resetsAt: double(entry["resets_at"]).map(Date.init(timeIntervalSince1970:)))
-                switch double(entry["window_minutes"]) {
-                case 300: result.fiveHour = window
-                case 10080: result.weekly = window
-                default: break
-                }
+                guard let entry = limits[key] as? [String: Any], let used = double(entry["used_percent"]),
+                      let minutes = double(entry["window_minutes"]), minutes > 0 else { continue }
+                let window = LimitWindow(usedPercent: used, resetsAt: double(entry["resets_at"]).map(Date.init(timeIntervalSince1970:)),
+                                         length: minutes * 60)
+                if minutes <= 24 * 60 { result.fiveHour = window } else { result.weekly = window }
             }
             if result.fiveHour != nil || result.weekly != nil { return result }
         }

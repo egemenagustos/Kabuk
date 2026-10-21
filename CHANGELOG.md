@@ -6,6 +6,10 @@ Changes that are on `main` but not released yet are listed under **Unreleased**.
 
 ## [Unreleased]
 
+### Fixed
+
+- Codex plan limits now show on ChatGPT's free plan, which has a single 30-day window instead of a 5-hour and a weekly one. Kabuk shows it on the long bar and labels it "30-day".
+
 ## [0.3.0] - 2026-10-21
 
 ### Added
