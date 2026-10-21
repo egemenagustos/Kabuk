@@ -6,6 +6,8 @@ Changes that are on `main` but not released yet are listed under **Unreleased**.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-21
+
 ### Added
 
 - **Plan limits in the status bar.** How much of your Claude and Codex plans' 5-hour and weekly limits you've used, next to today's cost. Each agent gets five dots for the hours of its 5-hour window and seven dashes for the days of its week, filled as far as the limit is used. A ring breathes around the current hour, so dots filled past it mean you'll hit the limit before it resets. Hover or click for the details: percentages, when each window resets, and an even-pace mark on each bar. Claude's numbers come from Claude Code's status line, Codex's from its session files after each turn.
@@ -55,6 +57,7 @@ The first release.
 - Seven themes plus your own JSON themes, three transparency levels, Liquid Glass on macOS 26.
 - Split panes, git badges, cost tracking, notifications, a Dock badge and session restore.
 
-[Unreleased]: https://github.com/egemenagustos/Kabuk/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/egemenagustos/Kabuk/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/egemenagustos/Kabuk/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/egemenagustos/Kabuk/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/egemenagustos/Kabuk/releases/tag/v0.1.0
