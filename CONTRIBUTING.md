@@ -90,6 +90,18 @@ How the demo is set up:
 - Before you open it, run `swift test` and `scripts/build-app.sh`. Try your change in the app.
 - For a visible change, add a screenshot or short clip.
 - If you change something the README describes, update the README in the same PR.
+- Add a line for anything a user would notice to `CHANGELOG.md` under **Unreleased**, in the right group (Added, Changed, Fixed, Removed). Write it for users: what they can now do or what no longer goes wrong.
+
+## Releasing
+
+Releases are cut from a clean `main`:
+
+```sh
+scripts/release.sh 0.2.0 --dry-run   # shows the CHANGELOG, README and Info.plist changes, then undoes them
+scripts/release.sh 0.2.0             # releases
+```
+
+The script turns **Unreleased** into `## [0.2.0] - <today>`, rewrites README's What's new from it, sets the version in `Resources/Info.plist`, runs the tests, builds and zips the app, then commits `Release 0.2.0` and tags `v0.2.0`. After you confirm, it pushes and creates the GitHub release with that version's notes and the zip. Publishing needs the GitHub CLI signed in (`gh auth login`).
 
 ## Reporting bugs
 

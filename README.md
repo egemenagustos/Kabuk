@@ -14,6 +14,7 @@ Kabuk (Turkish for *shell*) is a glassy, dark terminal that knows when Claude Co
 
 ## Contents
 
+- [What's new](#whats-new)
 - [Features](#features)
 - [Install](#install)
 - [Connect Claude Code and Codex](#connect-claude-code-and-codex)
@@ -24,6 +25,14 @@ Kabuk (Turkish for *shell*) is a glassy, dark terminal that knows when Claude Co
 - [Contributing](#contributing)
 - [Privacy](#privacy)
 - [License](#license)
+
+## What's new
+
+<!-- whats-new:start -->
+**0.1.0** (2026-10-20): the first release.
+
+See **[CHANGELOG.md](CHANGELOG.md)** for every version and what is on `main` but not released yet.
+<!-- whats-new:end -->
 
 ## Features
 
