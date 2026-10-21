@@ -127,6 +127,23 @@ enum ShellIntegration {
     }
     [[ -n $KABUK_DEMO_BIN ]] && precmd_functions+=(_kabuk_demo_path)
 
+    # Codex runs its turns on one shared background server, started from whichever terminal ran
+    # codex first, and calls the notify hook from there, with that terminal's pane and socket or
+    # none at all. In Kabuk each codex keeps its own, so its turns report from this pane.
+    # `function` so an alias of the user's can't break the definition.
+    function codex {
+      case $1 in
+        agents|app-server|remote-control) command codex "$@" ;;
+        *)
+          if (( ${@[(Ie)--no-daemon]} )); then
+            command codex "$@"
+          else
+            command codex --no-daemon "$@"
+          fi
+          ;;
+      esac
+    }
+
     # Run first so $? is still the command's exit code.
     precmd_functions=(_kabuk_precmd $precmd_functions)
     preexec_functions+=(_kabuk_preexec)

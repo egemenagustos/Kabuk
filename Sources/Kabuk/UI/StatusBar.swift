@@ -1,24 +1,27 @@
 import KabukCore
 import SwiftUI
 
-/// Bottom of the sidebar: palette shortcut and live counters.
+/// Bottom of the sidebar: plan limits and today's cost, then the palette shortcut and live counters.
+/// Two rows, because the sidebar is too narrow for all of it on one: a row wider than the sidebar
+/// widens the whole sidebar column, which then spills over both of its edges.
 struct StatusBar: View {
     @EnvironmentObject var state: AppState
 
     var body: some View {
-        HStack(spacing: 8) {
-            IconButton(symbol: "magnifyingglass", size: 12, help: "Command palette (⌘K)") { state.togglePalette() }
-            IconButton(symbol: "folder.badge.plus", size: 12, help: "Open project (⌘O)") { state.chooseProject() }
-            IconButton(symbol: "paintpalette", size: 12, help: "Themes (⇧⌘T)") { state.toggleThemeGallery() }
-            Spacer()
-            PlanLimitsChip(ledger: state.usage)
-            TodayCost(ledger: state.usage)
-            counter(.agentNeedsYou(.claude, message: nil), state.needsYouCount, Theme.needsYou)
-            counter(.running(command: "", startedAt: .now), state.busyCount, Theme.running)
-            counter(.succeeded(finishedAt: .distantPast), state.unseenCount, .white)
+        VStack(spacing: 0) {
+            UsageRow(ledger: state.usage)
+            HStack(spacing: 8) {
+                IconButton(symbol: "magnifyingglass", size: 12, help: "Command palette (⌘K)") { state.togglePalette() }
+                IconButton(symbol: "folder.badge.plus", size: 12, help: "Open project (⌘O)") { state.chooseProject() }
+                IconButton(symbol: "paintpalette", size: 12, help: "Themes (⇧⌘T)") { state.toggleThemeGallery() }
+                Spacer()
+                counter(.agentNeedsYou(.claude, message: nil), state.needsYouCount, Theme.needsYou)
+                counter(.running(command: "", startedAt: .now), state.busyCount, Theme.running)
+                counter(.succeeded(finishedAt: .distantPast), state.unseenCount, .white)
+            }
+            .frame(height: 38)
         }
         .padding(.horizontal, 12)
-        .frame(height: 38)
         .overlay(alignment: .top) { Rectangle().fill(Color.white.opacity(0.06)).frame(height: 1) }
         .animation(.spring(response: 0.3, dampingFraction: 0.8), value: [state.needsYouCount, state.busyCount, state.unseenCount])
     }
@@ -34,6 +37,23 @@ struct StatusBar: View {
                     .contentTransition(.numericText())
             }
             .transition(.scale.combined(with: .opacity))
+        }
+    }
+}
+
+/// The agents' plan limits and today's cost, once there is either.
+private struct UsageRow: View {
+    @ObservedObject var ledger: UsageLedger
+
+    var body: some View {
+        if !ledger.limits.isEmpty || ledger.today > 0 {
+            HStack(spacing: 8) {
+                PlanLimitsChip(ledger: ledger)
+                Spacer(minLength: 0)
+                TodayCost(ledger: ledger)
+            }
+            .padding(.top, 10)
+            .transition(.opacity)
         }
     }
 }
