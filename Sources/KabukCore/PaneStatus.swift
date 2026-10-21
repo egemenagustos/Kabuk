@@ -68,6 +68,10 @@ public struct PaneRuntime: Equatable, Sendable {
     public var permission: PermissionPrompt?
     /// TCP ports that processes started in this pane listen on.
     public var ports: [Int] = []
+    /// The main agent's subagents in this turn, plus background ones still running.
+    public var subagents: [Subagent] = []
+    /// Agent tool calls whose subagent hasn't announced itself yet.
+    public var launches: [SubagentLaunch] = []
 
     public init(cwd: String, now: Date = Date()) {
         self.cwd = cwd

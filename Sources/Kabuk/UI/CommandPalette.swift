@@ -147,6 +147,11 @@ struct CommandPalette: View {
                 IntegrationUI.uninstall()
             },
         ]
+        items.append(Item(id: "subagent-worktrees",
+                          title: s.subagentWorktrees ? "Turn Off Subagent Worktrees" : "Turn On Subagent Worktrees",
+                          subtitle: "Claude subagents that edit get their own worktree", symbol: "square.stack.3d.down.right", status: nil) {
+            s.subagentWorktrees.toggle()
+        })
         if let session = s.selectedSession, let worktree = session.worktree {
             items.append(Item(id: "review-worktree", title: "Review & Merge Worktree…", subtitle: worktree.branch,
                               symbol: "arrow.triangle.merge", status: nil) { s.reviewWorktree(of: session.id) })

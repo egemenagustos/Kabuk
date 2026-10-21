@@ -48,21 +48,69 @@ func codexRollout(threadID: String?) -> URL? {
     return threadID == nil ? newest?.url : nil
 }
 
+/// A subagent's task description, from the meta file Claude writes beside its transcript:
+/// <session>.jsonl → <session>/subagents/agent-<id>.meta.json. It may not exist yet at start.
+func subagentFiles(transcript: String?, agent: String) -> (description: String?, transcript: String?) {
+    guard let transcript else { return (nil, nil) }
+    let folder = URL(fileURLWithPath: transcript).deletingPathExtension().appendingPathComponent("subagents")
+    let meta = (try? Data(contentsOf: folder.appendingPathComponent("agent-\(agent).meta.json"))).map(json) ?? [:]
+    return (meta["description"] as? String, folder.appendingPathComponent("agent-\(agent).jsonl").path)
+}
+
+/// Kabuk's switch for subagent worktrees: a file beside the socket turns them off.
+func subagentWorktreesEnabled(socket: String) -> Bool {
+    let flag = URL(fileURLWithPath: socket).deletingLastPathComponent().appendingPathComponent("subagent-worktrees-off")
+    return !FileManager.default.fileExists(atPath: flag.path)
+}
+
 /// How long a permission request may wait for an answer before Claude asks in the terminal.
 let permissionWait: TimeInterval = 300
 
 var event: HookEvent
 var suggestions: Any?
+/// Printed for Claude after the event is sent: the Agent call's input with a worktree added.
+var hookOutput: String?
 switch args[1] {
 case "claude":
     let payload = isatty(STDIN_FILENO) == 0 ? json(FileHandle.standardInput.readDataToEndOfFile()) : [:]
+    // Set when a subagent, not the main agent, sent the event.
+    let agent = payload["agent_id"] as? String
+    let agentType = payload["agent_type"] as? String
+    let tool = payload["tool_name"] as? String
+    let input = payload["tool_input"] as? [String: Any] ?? [:]
     if args[2] == "PermissionRequest" {
-        let tool = payload["tool_name"] as? String ?? "Tool"
         suggestions = payload["permission_suggestions"]
         event = HookEvent(pane: pane, source: "claude", event: args[2],
-                          request: UUID().uuidString, tool: tool,
-                          detail: PermissionSummary.detail(tool: tool, input: payload["tool_input"] as? [String: Any] ?? [:]),
-                          canAlwaysAllow: !((suggestions as? [Any])?.isEmpty ?? true))
+                          request: UUID().uuidString, tool: tool ?? "Tool",
+                          detail: PermissionSummary.detail(tool: tool ?? "Tool", input: input),
+                          canAlwaysAllow: !((suggestions as? [Any])?.isEmpty ?? true), agent: agent, agentType: agentType)
+        break
+    }
+    if args[2] == "SubagentStart" || args[2] == "SubagentStop", let agent {
+        let files = subagentFiles(transcript: payload["transcript_path"] as? String, agent: agent)
+        let transcript = payload["agent_transcript_path"] as? String ?? files.transcript
+        event = HookEvent(pane: pane, source: "claude", event: args[2],
+                          message: firstLine(payload["last_assistant_message"] as? String),
+                          detail: files.description, agent: agent, agentType: agentType,
+                          transcript: transcript.flatMap { $0.isEmpty ? nil : $0 })
+        break
+    }
+    if args[2] == "PreToolUse" || args[2] == "PostToolUse" {
+        var kind: String?, detail: String?
+        if let tool, SubagentIsolation.launchTools.contains(tool) {
+            kind = input["subagent_type"] as? String ?? "general-purpose"
+            detail = input["description"] as? String
+            let cwd = payload["cwd"] as? String ?? FileManager.default.currentDirectoryPath
+            if args[2] == "PreToolUse",
+               let updated = SubagentIsolation.updatedInput(input, enabled: subagentWorktreesEnabled(socket: socketPath),
+                                                            inGitRepository: SubagentIsolation.inGitRepository(cwd)) {
+                hookOutput = SubagentIsolation.hookOutput(updated)
+            }
+        }
+        event = HookEvent(pane: pane, source: "claude", event: args[2],
+                          cwd: agent == nil ? nil : payload["cwd"] as? String,
+                          kind: kind, tool: tool, detail: detail, session: payload["session_id"] as? String,
+                          agent: agent, agentType: agentType)
         break
     }
     var tokens: TokenUsage?
@@ -93,6 +141,9 @@ case "codex":
 default:
     exit(0)
 }
+
+// Claude reads the hook's stdout when it exits, so the answer can go out before the event.
+if let hookOutput { print(hookOutput) }
 
 let fd = socket(AF_UNIX, SOCK_STREAM, 0)
 guard fd >= 0 else { exit(0) }

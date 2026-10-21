@@ -22,6 +22,17 @@ final class AppState: ObservableObject {
         }
     }
     @Published var animatedBackground: Bool { didSet { scheduleSave() } }
+    @Published var subagentWorktrees: Bool {
+        didSet {
+            Self.writeSubagentWorktreesFlag(subagentWorktrees)
+            scheduleSave()
+        }
+    }
+    /// Sessions whose children (subagents, child sessions) are folded away in the sidebar.
+    @Published var collapsedSessions: Set<UUID> = []
+    /// The subagent whose live view is open: its pane and id.
+    @Published var subagentDetail: SubagentDetailRequest?
+    private var branchLookups: Set<String> = []
     @Published private(set) var themes: [TerminalTheme] = TerminalTheme.builtIn
     @Published var paletteVisible = false
     @Published var themeGalleryVisible = false
@@ -94,6 +105,8 @@ final class AppState: ObservableObject {
         fontSize = snapshot.fontSize
         themeID = snapshot.themeID
         animatedBackground = snapshot.animatedBackground
+        subagentWorktrees = snapshot.subagentWorktrees
+        Self.writeSubagentWorktreesFlag(snapshot.subagentWorktrees)
         terminals.fontSize = snapshot.fontSize
         reloadThemes()
         terminals.theme = theme
@@ -588,6 +601,7 @@ final class AppState: ObservableObject {
         }
 
         runtimes[paneID] = new
+        lookUpSubagentBranches(paneID, new)
         // The agent quit; notes queued for it have nobody to go to.
         if old.agent != nil, new.agent == nil { pendingPrompts[paneID] = nil }
         if let event, event.source == "shell", event.event == "start", let command = event.cmd {
@@ -640,6 +654,97 @@ final class AppState: ObservableObject {
     private func updateBadge() {
         let count = needsYouCount + unseenCount
         NSApp.dockTile.badgeLabel = count > 0 ? "\(count)" : nil
+    }
+
+    // MARK: Subagents
+
+    /// kabuk-hook reads this flag beside the socket; there's no round trip in the Agent call.
+    private static func writeSubagentWorktreesFlag(_ enabled: Bool) {
+        let flag = ShellIntegration.supportDir.appendingPathComponent("subagent-worktrees-off")
+        if enabled {
+            try? FileManager.default.removeItem(at: flag)
+        } else {
+            try? FileManager.default.createDirectory(at: ShellIntegration.supportDir, withIntermediateDirectories: true)
+            FileManager.default.createFile(atPath: flag.path, contents: Data())
+        }
+    }
+
+    /// A subagent working outside the pane's folder has a worktree; its branch is worth showing.
+    private func lookUpSubagentBranches(_ paneID: UUID, _ runtime: PaneRuntime) {
+        for subagent in runtime.subagents where subagent.branch == nil {
+            guard let cwd = subagent.cwd, cwd != runtime.cwd, !branchLookups.contains(cwd) else { continue }
+            branchLookups.insert(cwd)
+            let id = subagent.id
+            DispatchQueue.global(qos: .utility).async { [weak self] in
+                let branch = Shell.git(["rev-parse", "--abbrev-ref", "HEAD"], in: cwd)
+                guard branch.ok else { return }
+                let name = branch.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+                DispatchQueue.main.async {
+                    guard let self, let index = self.runtimes[paneID]?.subagents.firstIndex(where: { $0.id == id }) else { return }
+                    self.runtimes[paneID]?.subagents[index].branch = name
+                }
+            }
+        }
+    }
+
+    /// Sessions started from this pane, shown as chips under it.
+    func childSessions(of paneID: UUID) -> [Session] {
+        guard let session = session(containing: paneID) else { return [] }
+        let first = session.root.paneIDs.first
+        return allSessions.filter { child in
+            child.parent == session.id && (child.parentPane.map { session.root.contains($0) } == true ? child.parentPane == paneID : paneID == first)
+        }
+    }
+
+    /// Sessions started from this one, for the sidebar tree.
+    func childSessions(ofSession sessionID: UUID) -> [Session] {
+        allSessions.filter { $0.parent == sessionID }
+    }
+
+    /// A project's sessions that aren't shown under a parent session.
+    func rootSessions(of project: Project) -> [Session] {
+        project.sessions.filter { $0.parent.flatMap { location(of: $0) } == nil }
+    }
+
+    func toggleCollapsed(_ sessionID: UUID) {
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
+            if collapsedSessions.contains(sessionID) { collapsedSessions.remove(sessionID) } else { collapsedSessions.insert(sessionID) }
+        }
+    }
+
+    func subagent(_ request: SubagentDetailRequest) -> Subagent? {
+        runtimes[request.paneID]?.subagents.first { $0.id == request.subagentID }
+    }
+
+    func showSubagent(_ subagentID: String, in paneID: UUID) {
+        withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) {
+            subagentDetail = SubagentDetailRequest(paneID: paneID, subagentID: subagentID)
+        }
+    }
+
+    func closeSubagentDetail() {
+        withAnimation(.easeOut(duration: 0.2)) { subagentDetail = nil }
+    }
+
+    /// Opens the review sheet for the worktree a subagent worked in.
+    func reviewSubagentWorktree(_ subagent: Subagent) {
+        guard let cwd = subagent.cwd else { return }
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let top = Shell.git(["rev-parse", "--show-toplevel"], in: cwd).stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+            let branch = Shell.git(["rev-parse", "--abbrev-ref", "HEAD"], in: cwd).stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !top.isEmpty, !branch.isEmpty, let repo = Worktrees.repoRoot(cwd) else {
+                DispatchQueue.main.async { Self.alert("No worktree to review", "\(cwd) is gone; Claude removes a subagent's worktree when it changed nothing.") }
+                return
+            }
+            let info = WorktreeInfo(path: top, branch: branch, repoRoot: repo, baseRef: "")
+            DispatchQueue.main.async {
+                guard let self else { return }
+                self.subagentDetail = nil
+                withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) {
+                    self.worktreeReview = WorktreeReviewRequest(info: info, sessionID: nil)
+                }
+            }
+        }
     }
 
     // MARK: Ports
@@ -1024,7 +1129,8 @@ final class AppState: ObservableObject {
         }
         return WorkspaceSnapshot(projects: projects, selectedSession: selectedSessionID,
                                  sidebarVisible: sidebarVisible, opacity: opacity, fontSize: fontSize,
-                                 themeID: themeID, animatedBackground: animatedBackground)
+                                 themeID: themeID, animatedBackground: animatedBackground,
+                                 subagentWorktrees: subagentWorktrees)
     }
 
     func scheduleSave() {
@@ -1041,6 +1147,11 @@ final class AppState: ObservableObject {
         saveWork?.cancel()
         Persistence.save(snapshot)
     }
+}
+
+struct SubagentDetailRequest: Equatable {
+    var paneID: UUID
+    var subagentID: String
 }
 
 struct WorktreeReviewRequest: Equatable {

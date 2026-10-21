@@ -7,12 +7,15 @@ public struct PermissionPrompt: Equatable, Sendable {
     public var detail: String
     /// Claude offered rules ("always allow this") that an Always answer can apply.
     public var canAlwaysAllow: Bool
+    /// The subagent asking, if it isn't the main agent.
+    public var agent: String?
 
-    public init(id: String, tool: String, detail: String, canAlwaysAllow: Bool) {
+    public init(id: String, tool: String, detail: String, canAlwaysAllow: Bool, agent: String? = nil) {
         self.id = id
         self.tool = tool
         self.detail = detail
         self.canAlwaysAllow = canAlwaysAllow
+        self.agent = agent
     }
 }
 

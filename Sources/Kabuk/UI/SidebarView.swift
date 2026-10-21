@@ -76,8 +76,8 @@ private struct ProjectSection: View {
             }
             .help(project.path)
 
-            ForEach(project.sessions) { session in
-                SessionRow(session: session, selection: selection)
+            ForEach(state.rootSessions(of: project)) { session in
+                SessionTree(session: session, selection: selection)
                     .transition(.asymmetric(
                         insertion: .move(edge: .leading).combined(with: .opacity),
                         removal: .scale(scale: 0.9, anchor: .leading).combined(with: .opacity)))
@@ -86,10 +86,49 @@ private struct ProjectSection: View {
     }
 }
 
+/// A session with what was started from it underneath: its agents' subagents and the
+/// sessions spawned from it, joined by a guide line.
+private struct SessionTree: View {
+    @EnvironmentObject var state: AppState
+    let session: Session
+    let selection: Namespace.ID
+
+    var body: some View {
+        let subagents = session.root.panes.flatMap { pane in state.runtime(pane).subagents.map { (pane.id, $0) } }
+        let children = state.childSessions(ofSession: session.id)
+        let count = subagents.count + children.count
+        let open = !state.collapsedSessions.contains(session.id)
+        VStack(alignment: .leading, spacing: 2) {
+            SessionRow(session: session, selection: selection, children: count, expanded: open)
+            if count > 0 && open {
+                HStack(alignment: .top, spacing: 0) {
+                    Rectangle().fill(Color.white.opacity(0.1)).frame(width: 1).padding(.vertical, 4)
+                    VStack(alignment: .leading, spacing: 1) {
+                        ForEach(subagents, id: \.1.id) { paneID, subagent in
+                            SubagentRow(paneID: paneID, subagent: subagent)
+                                .transition(.move(edge: .top).combined(with: .opacity))
+                        }
+                        ForEach(children) { child in
+                            SessionTree(session: child, selection: selection)
+                                .transition(.move(edge: .top).combined(with: .opacity))
+                        }
+                    }
+                    .padding(.leading, 6)
+                }
+                .padding(.leading, 18)
+            }
+        }
+        .animation(.spring(response: 0.35, dampingFraction: 0.85), value: subagents.map(\.1.id))
+    }
+}
+
 private struct SessionRow: View {
     @EnvironmentObject var state: AppState
     let session: Session
     let selection: Namespace.ID
+    /// Subagents and child sessions shown under the row, foldable from here.
+    var children = 0
+    var expanded = true
     @State private var hovering = false
     @State private var shakes: CGFloat = 0
     @State private var bounce = false
@@ -115,6 +154,18 @@ private struct SessionRow: View {
                         editing = true
                     }
             } else {
+                if children > 0 {
+                    Button { state.toggleCollapsed(session.id) } label: {
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 9, weight: .bold))
+                            .foregroundStyle(.white.opacity(0.45))
+                            .rotationEffect(.degrees(expanded ? 90 : 0))
+                            .frame(width: 10)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .help(expanded ? "Hide \(children) underneath" : "Show \(children) underneath")
+                }
                 if session.worktree != nil {
                     Image(systemName: "square.stack.3d.down.right")
                         .font(.system(size: 10, weight: .semibold))

@@ -7,10 +7,13 @@ public enum StatusReducer {
 
     public static func reduce(_ state: PaneRuntime, _ event: HookEvent, now: Date = Date()) -> PaneRuntime {
         var s = state
-        if let cwd = event.cwd, !cwd.isEmpty { s.cwd = cwd }
+        // A subagent's folder may be its own worktree; the pane stays where it is.
+        if let cwd = event.cwd, !cwd.isEmpty, event.agent == nil { s.cwd = cwd }
         if let tokens = event.tokens { s.tokens = tokens }
-        // Any further progress from Claude means a held permission request was answered elsewhere.
-        if event.source == "claude", event.event != "PermissionRequest", event.event != "Notification" {
+        // Further progress from whoever asked means a held permission request was answered
+        // elsewhere. Subagents run side by side, so another one's progress says nothing.
+        if event.source == "claude", event.event != "PermissionRequest", event.event != "Notification",
+           !subagentLifecycle(event), s.permission?.agent == event.agent {
             s.permission = nil
         }
 
@@ -35,6 +38,8 @@ public enum StatusReducer {
                 s.agent = nil
                 s.status = .running(command: cmd, startedAt: now)
             }
+            s.subagents = []
+            s.launches = []
 
         case ("shell", "end"):
             let code = event.code ?? 0
@@ -45,6 +50,8 @@ public enum StatusReducer {
             s.permission = nil
             s.agent = nil
             s.tag = "zsh"
+            s.subagents = []
+            s.launches = []
             if code == interrupted {
                 s.status = .idle
             } else if code == 0 {
@@ -63,8 +70,45 @@ public enum StatusReducer {
             if let prompt = event.prompt, !prompt.isEmpty { s.lastPrompt = prompt }
             s.status = .agentWorking(.claude, since: now)
             if s.turnStartedAt == nil { s.turnStartedAt = now }
+            // A new turn starts with only the background subagents that are still at it.
+            s.subagents.removeAll { $0.state == .done }
+            s.launches = []
+
+        case ("claude", "SubagentStart"):
+            guard let id = event.agent else { return state }
+            let type = event.agentType ?? "general-purpose"
+            var description = event.detail ?? ""
+            if let index = s.launches.firstIndex(where: { $0.type == type }) ?? s.launches.indices.first {
+                if description.isEmpty { description = s.launches[index].description }
+                s.launches.remove(at: index)
+            }
+            s.subagents.removeAll { $0.id == id }
+            var subagent = Subagent(id: id, type: type, description: description, startedAt: now)
+            subagent.transcript = event.transcript
+            s.subagents.append(subagent)
+
+        case ("claude", "SubagentStop"):
+            guard let id = event.agent, let index = s.subagents.firstIndex(where: { $0.id == id }) else { return state }
+            s.subagents[index].state = .done
+            s.subagents[index].finishedAt = now
+            if let summary = event.message { s.subagents[index].summary = summary }
+            if let transcript = event.transcript { s.subagents[index].transcript = transcript }
 
         case ("claude", "PreToolUse"), ("claude", "PostToolUse"):
+            // An Agent call: its subagent type travels in `kind`, its task in `detail`.
+            if event.event == "PreToolUse", let tool = event.tool, SubagentIsolation.launchTools.contains(tool) {
+                s.launches.append(SubagentLaunch(type: event.kind ?? "general-purpose", description: event.detail ?? ""))
+            }
+            if let id = event.agent {
+                // A subagent's tool use. Background subagents outlive the main turn, so the
+                // pane's own status is left alone.
+                if let index = s.subagents.firstIndex(where: { $0.id == id }) {
+                    if event.event == "PostToolUse" { s.subagents[index].toolCount += 1 }
+                    if let tool = event.tool { s.subagents[index].lastTool = tool }
+                    if let cwd = event.cwd, !cwd.isEmpty { s.subagents[index].cwd = cwd }
+                }
+                break
+            }
             s.agent = .claude
             s.tag = "claude"
             if case .agentWorking = s.status {} else {
@@ -78,7 +122,8 @@ public enum StatusReducer {
             let tool = event.tool ?? "Tool"
             let detail = event.detail ?? ""
             if let id = event.request {
-                s.permission = PermissionPrompt(id: id, tool: tool, detail: detail, canAlwaysAllow: event.canAlwaysAllow ?? false)
+                s.permission = PermissionPrompt(id: id, tool: tool, detail: detail, canAlwaysAllow: event.canAlwaysAllow ?? false,
+                                                agent: event.agent)
             }
             s.status = .agentNeedsYou(.claude, message: detail.isEmpty ? "Allow \(tool)?" : "Allow \(tool): \(detail)")
 
@@ -138,6 +183,10 @@ public enum StatusReducer {
             s.agentWorkTime += now.timeIntervalSince(start)
             s.turnStartedAt = nil
         }
+    }
+
+    static func subagentLifecycle(_ event: HookEvent) -> Bool {
+        event.event == "SubagentStart" || event.event == "SubagentStop"
     }
 
     static func isIdleReminder(_ event: HookEvent) -> Bool {

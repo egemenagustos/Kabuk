@@ -15,10 +15,17 @@ struct PaneContainer: View {
             header(runtime)
             TerminalPaneView(paneID: pane.id, cwd: pane.cwd,
                              isFocused: isFocused && !state.paletteVisible && !state.themeGalleryVisible && state.findPane == nil
-                                && state.diffRequest == nil && !state.historyVisible && state.worktreeReview == nil)
+                                && state.diffRequest == nil && !state.historyVisible && state.worktreeReview == nil
+                                && state.subagentDetail == nil)
                 .padding(.horizontal, 12)
                 .padding(.bottom, 8)
+            let children = state.childSessions(of: pane.id)
+            if !runtime.subagents.isEmpty || !children.isEmpty {
+                SubagentStrip(paneID: pane.id, subagents: runtime.subagents, children: children)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
         }
+        .animation(.spring(response: 0.35, dampingFraction: 0.85), value: runtime.subagents.map(\.id))
         .background(
             RoundedRectangle(cornerRadius: 14, style: .continuous)
                 .fill(Theme.color(state.theme.background).opacity(state.opacity))

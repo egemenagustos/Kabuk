@@ -12,6 +12,7 @@ import SwiftUI
 ///   dev.kabuk.answer (object)   answers the first held permission request: allow, deny, always, ask
 ///   dev.kabuk.showdiff (object) opens the diff of that file (or the first) in any turn summary
 ///   dev.kabuk.note (object)     leaves that note on the first changed line of the open diff; "send" sends the notes
+///   dev.kabuk.subagent (object) opens the live view of the first subagent with that id prefix (any when empty)
 ///   dev.kabuk.review (object)   "open" shows the first worktree session's review; "merge" or "squash" merges it
 ///                               and writes <dir>/review.txt
 ///   dev.kabuk.undo (object)     "undo" or "redo" for the first pane with a turn summary, without asking
@@ -62,6 +63,7 @@ enum DebugHooks {
                 if state.themeGalleryVisible { state.toggleThemeGallery() }
                 if state.diffRequest != nil { withAnimation(.easeOut(duration: 0.2)) { state.diffRequest = nil } }
                 if state.worktreeReview != nil { state.closeWorktreeReview() }
+                if state.subagentDetail != nil { state.closeSubagentDetail() }
                 if state.findPane != nil { state.toggleFind() }
             }
         }
@@ -162,6 +164,17 @@ enum DebugHooks {
                     let lines = await Task.detached { TurnTracker.diff(request.file, in: request.change) }.value
                     guard let line = lines.first(where: { $0.kind == .add || $0.kind == .remove }) else { return }
                     state.addComment(DiffComment(path: request.file.path, diffLine: line, note: text), for: pane)
+                }
+            }
+        }
+        center.addObserver(forName: .init("dev.kabuk.subagent"), object: nil, queue: .main) { note in
+            MainActor.assumeIsolated {
+                let prefix = note.object as? String ?? ""
+                for (pane, runtime) in state.runtimes {
+                    if let subagent = runtime.subagents.first(where: { $0.id.hasPrefix(prefix) }) {
+                        state.showSubagent(subagent.id, in: pane)
+                        return
+                    }
                 }
             }
         }
