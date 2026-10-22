@@ -21,5 +21,14 @@ if [ ! -f build/AppIcon.icns ]; then
 fi
 cp build/AppIcon.icns "$APP/Contents/Resources/"
 
-codesign --force --deep --sign - "$APP" >/dev/null
+# macOS keeps the permissions it granted Kabuk (Files and Folders and the like) only while the
+# signature's certificate stays the same. An ad-hoc signature is new with every build, so after
+# each update macOS would ask again. scripts/make-signing-cert.sh creates the certificate;
+# KABUK_SIGN_IDENTITY picks another one. Without it the build is signed ad hoc.
+IDENTITY="${KABUK_SIGN_IDENTITY:-Kabuk Code Signing}"
+if ! security find-identity -p codesigning 2>/dev/null | grep -q "\"$IDENTITY\""; then
+  echo "No \"$IDENTITY\" certificate; signing ad hoc, so macOS will ask for permissions again after this build."
+  IDENTITY="-"
+fi
+codesign --force --deep --sign "$IDENTITY" "$APP" >/dev/null
 echo "Built $APP"

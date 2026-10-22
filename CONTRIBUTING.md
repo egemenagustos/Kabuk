@@ -9,9 +9,11 @@ You need Xcode 26 or later. The macOS 26 SDK provides the Liquid Glass APIs. The
 ```sh
 swift build            # debug build of everything
 swift test             # KabukCore unit tests
-scripts/build-app.sh   # bundles build/Kabuk.app (Info.plist, icon, kabuk-hook, ad-hoc signature)
+scripts/build-app.sh   # bundles build/Kabuk.app (Info.plist, icon, kabuk-hook, signature)
 open build/Kabuk.app
 ```
+
+`build-app.sh` signs with the "Kabuk Code Signing" certificate when the keychain has it, and ad hoc otherwise. macOS keeps Kabuk's permissions (Files and Folders and the like) only while that certificate stays the same, so releases are always signed with it. `scripts/make-signing-cert.sh` creates it once; keep a backup of it.
 
 There's no Xcode project. Open `Package.swift` in Xcode if you want the IDE.
 

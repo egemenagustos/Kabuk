@@ -19,6 +19,7 @@ Changes that are on `main` but not released yet are listed under **Unreleased**.
 
 ### Fixed
 
+- macOS no longer asks again for the permissions you gave Kabuk after every update. Kabuk was signed ad hoc, which macOS takes for a new app with each build; it's now signed with the same certificate every time. The update to this version asks once more, the ones after it don't.
 - ⌘K, ⌘R, ⌘F and the other fields that open over a pane take the keyboard focus reliably. Sometimes the terminal kept the keys.
 
 ## [0.5.1] - 2026-10-21
