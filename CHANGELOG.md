@@ -6,6 +6,8 @@ Changes that are on `main` but not released yet are listed under **Unreleased**.
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-10-22
+
 ### Added
 
 - **More agents.** OpenCode, Gemini CLI, Antigravity CLI and Copilot CLI get an integration like Claude's and Codex's: sidebar status, notifications, the turn summary with Undo, worktree sessions, and Claude can hand them work. Copilot's and OpenCode's permission requests wait in the sidebar. Install them from **Install Agent Integrations…**, which sets up the agents Kabuk finds on your `PATH`.
@@ -105,7 +107,8 @@ The first release.
 - Seven themes plus your own JSON themes, three transparency levels, Liquid Glass on macOS 26.
 - Split panes, git badges, cost tracking, notifications, a Dock badge and session restore.
 
-[Unreleased]: https://github.com/egemenagustos/Kabuk/compare/v0.5.1...HEAD
+[Unreleased]: https://github.com/egemenagustos/Kabuk/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/egemenagustos/Kabuk/compare/v0.5.1...v0.6.0
 [0.5.1]: https://github.com/egemenagustos/Kabuk/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/egemenagustos/Kabuk/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/egemenagustos/Kabuk/compare/v0.3.2...v0.4.0
