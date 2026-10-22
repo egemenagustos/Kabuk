@@ -242,7 +242,7 @@ private struct FindBar: View {
         .glass(in: Capsule(), tint: .black.opacity(0.3))
         .overlay(Capsule().strokeBorder(Color.white.opacity(0.1)))
         .shadow(color: .black.opacity(0.35), radius: 12, y: 6)
-        .onAppear { focused = true }
+        .focusOnAppear($focused)
     }
 
     private var countText: String {

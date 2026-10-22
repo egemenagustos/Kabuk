@@ -338,7 +338,7 @@ private struct NoteField: View {
         .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(Theme.running.opacity(0.5)))
         .padding(.leading, 92)
         .padding(.vertical, 4)
-        .onAppear { focused = true }
+        .focusOnAppear($focused)
     }
 }
 

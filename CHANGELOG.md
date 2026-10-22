@@ -17,6 +17,10 @@ Changes that are on `main` but not released yet are listed under **Unreleased**.
 - Inside Kabuk, `opencode` runs with a private server (`--standalone`), so its plugin reports from the pane it runs in.
 - The integration menu items are now **Install Agent Integrations…** and **Remove Agent Integrations**.
 
+### Fixed
+
+- ⌘K, ⌘R, ⌘F and the other fields that open over a pane take the keyboard focus reliably. Sometimes the terminal kept the keys.
+
 ## [0.5.1] - 2026-10-21
 
 ### Fixed

@@ -65,8 +65,8 @@ struct CommandPalette: View {
         .glass(in: RoundedRectangle(cornerRadius: 16, style: .continuous), tint: .black.opacity(0.35))
         .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Color.white.opacity(0.1)))
         .shadow(color: .black.opacity(0.5), radius: 40, y: 20)
+        .focusOnAppear($focused)
         .onAppear {
-            focused = true
             if let pane = state.selectedSession?.focusedPane { state.refreshSkills(for: pane) }
         }
     }

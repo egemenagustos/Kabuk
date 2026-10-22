@@ -79,11 +79,8 @@ struct SkillPicker: View {
         }
         .frame(width: 380)
         .environment(\.colorScheme, .dark)
-        .onAppear {
-            state.refreshSkills(for: paneID)
-            // The popover's window isn't key yet when it appears; focusing right away is lost.
-            DispatchQueue.main.async { focused = true }
-        }
+        .focusOnAppear($focused)
+        .onAppear { state.refreshSkills(for: paneID) }
     }
 
     private var filtered: [Skill] {
