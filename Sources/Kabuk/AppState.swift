@@ -70,6 +70,13 @@ final class AppState: ObservableObject {
     let usage = UsageLedger()
     let history = HistoryStore()
     let ports = PortMonitor()
+    let radar = ConflictRadar()
+    /// Files that parallel checkouts both change, by repository, then by checkout folder.
+    @Published private(set) var overlaps: [String: [String: [Overlap]]] = [:]
+    /// The session whose overlap details are open from its sidebar warning.
+    @Published var overlapDetail: UUID?
+    /// Repositories scanned since launch; what the first scan finds was there before, not new.
+    private var radarScanned: Set<String> = []
     /// The last failed command in each pane, for "Ask Claude".
     @Published private(set) var failures: [UUID: CommandFailure] = [:]
     /// A failure arrives in two halves, in either order: the output read back from the terminal
@@ -142,6 +149,7 @@ final class AppState: ObservableObject {
         terminals.theme = theme
 
         git.onUpdate = { [weak self] id, status in self?.setGit(status, for: id) }
+        radar.onUpdate = { [weak self] repo, found in self?.setOverlaps(found, in: repo) }
         turns.onChange = { [weak self] id, change in self?.turnFinished(id, change) }
         terminals.onCommandStart = { [weak self] id in self?.commandStarted(id) }
         terminals.onFailure = { [weak self] id, failure in self?.commandFailed(id, failure) }
@@ -175,11 +183,14 @@ final class AppState: ObservableObject {
                 self?.markVisibleSeen()
                 self?.refreshGitForSelection()
                 self?.releaseVisiblePermissions()
+                // Files may have changed in an editor meanwhile.
+                self?.refreshAllRadars()
             }
         })
         observers.append(center.addObserver(forName: NSApplication.didResignActiveNotification, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.appActive = false }
         })
+        refreshAllRadars()
     }
 
     // MARK: Lookups
@@ -321,6 +332,7 @@ final class AppState: ObservableObject {
     private func removeSession(_ sessionID: UUID) {
         guard let loc = location(of: sessionID) else { return }
         let session = projects[loc.project].sessions[loc.session]
+        defer { if let repo = session.worktree?.repoRoot { refreshRadar(repo, delay: 0.3) } }
         for pane in session.root.panes {
             terminals.close(pane.id)
             runtimes[pane.id] = nil
@@ -409,6 +421,7 @@ final class AppState: ObservableObject {
         // Off screen nothing would start its shell; start it now so the agent gets going.
         if !select { _ = terminals.view(for: session.focusedPane, cwd: info.path) }
         scheduleSave()
+        refreshRadar(info.repoRoot)
     }
 
     // MARK: Worktree review
@@ -450,10 +463,11 @@ final class AppState: ObservableObject {
         closeWorktreeReview()
         if let id = request.sessionID { removeSession(id) }
         let info = request.info
-        DispatchQueue.global(qos: .userInitiated).async {
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             let failure = Worktrees.discard(info)
             DispatchQueue.main.async {
                 if let failure { Self.alert("Couldn't remove the worktree", failure.localizedDescription) }
+                self?.refreshRadar(info.repoRoot, delay: 0.3)
             }
         }
     }
@@ -737,6 +751,9 @@ final class AppState: ObservableObject {
             showFailure(paneID)
         }
         if let event, Self.touchesFiles(event) { git.refresh(paneID, cwd: new.cwd) }
+        if let event, Self.touchesFiles(event) || (old.turnStartedAt != nil && new.turnStartedAt == nil) {
+            refreshRadar(for: session, cwd: new.cwd)
+        }
         if let event, event.tokens != nil, let agent = new.agent ?? AgentKind(rawValue: event.source) {
             usage.record(event, agent: agent)
         }
@@ -1078,14 +1095,7 @@ final class AppState: ObservableObject {
     func sendComments(for paneID: UUID) {
         guard let comments = reviewComments[paneID], !comments.isEmpty else { return }
         let prompt = ReviewPrompt.build(comments)
-        let runtime = runtimes[paneID]
-        if runtime?.agent != nil {
-            if runtime?.status.isBusy == true {
-                pendingPrompts[paneID] = [pendingPrompts[paneID], prompt].compactMap { $0 }.joined(separator: "\n\n")
-            } else {
-                paste(prompt, into: paneID)
-            }
-        } else if let launch = Self.agentLaunch(.claude, prompt: prompt, name: "review") {
+        if !deliver(prompt, to: paneID), let launch = Self.agentLaunch(.claude, prompt: prompt, name: "review") {
             split(.horizontal, from: paneID, command: launch.command, typed: launch.typed)
         }
         withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
@@ -1093,6 +1103,130 @@ final class AppState: ObservableObject {
             diffRequest = nil
         }
         if let session = session(containing: paneID) { updateSession(session.id) { $0.focusedPane = paneID } }
+    }
+
+    /// Hands a prompt to the pane's agent: typed in now if it's idle, after its turn if it's
+    /// working or waiting for an answer (typing then would answer its question). False when no
+    /// agent runs in the pane.
+    @discardableResult
+    private func deliver(_ prompt: String, to paneID: UUID) -> Bool {
+        guard let runtime = runtimes[paneID], runtime.agent != nil else { return false }
+        if runtime.status.isBusy || runtime.status.needsYou {
+            pendingPrompts[paneID] = [pendingPrompts[paneID], prompt].compactMap { $0 }.joined(separator: "\n\n")
+        } else {
+            paste(prompt, into: paneID)
+        }
+        return true
+    }
+
+    // MARK: Conflict radar
+
+    /// Repositories with at least one worktree session; only they have checkouts to compare.
+    private var radarRepos: Set<String> { Set(allSessions.compactMap { $0.worktree?.repoRoot }) }
+
+    private func refreshAllRadars() {
+        for repo in Set(overlaps.keys).union(radarRepos) { refreshRadar(repo, delay: 0.5) }
+    }
+
+    /// After something may have changed files in the session's checkout.
+    private func refreshRadar(for session: Session, cwd: String) {
+        if let repo = session.worktree?.repoRoot {
+            refreshRadar(repo)
+        } else if let repo = radarRepos.first(where: { cwd == $0 || cwd.hasPrefix($0 + "/") }) {
+            refreshRadar(repo)
+        }
+    }
+
+    func refreshRadar(_ repo: String, delay: TimeInterval = 2) {
+        radar.refresh(repo: repo, checkouts: { [weak self] in
+            guard let self else { return [] }
+            let worktrees = self.allSessions.compactMap(\.worktree).filter { $0.repoRoot == repo }
+            guard !worktrees.isEmpty else { return [] }
+            return [ConflictRadar.Checkout(path: repo, branch: "")]
+                + worktrees.map { ConflictRadar.Checkout(path: $0.path, branch: $0.branch) }
+        }, delay: delay)
+    }
+
+    private func setOverlaps(_ found: [String: [Overlap]], in repo: String) {
+        defer { radarScanned.insert(repo) }
+        let before = overlaps[repo] ?? [:]
+        guard before != found else { return }
+        withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) { overlaps[repo] = found.isEmpty ? nil : found }
+        if radarScanned.contains(repo) { notifyNewConflicts(before: before, after: found, repo: repo) }
+    }
+
+    /// A conflict that wasn't there before is worth a notification while the user looks elsewhere.
+    /// Each pair shows up from both sides; it's announced once.
+    private func notifyNewConflicts(before: [String: [Overlap]], after: [String: [Overlap]], repo: String) {
+        var announced: Set<Set<String>> = []
+        for (path, list) in after.sorted(by: { $0.key < $1.key }) {
+            for overlap in list where !overlap.conflicts.isEmpty {
+                let pair: Set<String> = [path, overlap.other]
+                let old = before[path]?.first { $0.other == overlap.other }?.conflicts.map(\.path) ?? []
+                let fresh = overlap.conflicts.map(\.path).filter { !old.contains($0) }
+                guard !fresh.isEmpty, announced.insert(pair).inserted,
+                      let session = allSessions.first(where: { $0.worktree?.path == path })
+                        ?? allSessions.first(where: { $0.worktree?.path == overlap.other }) else { continue }
+                if appActive && pair.contains(where: { p in selectedSession?.worktree?.path == p }) { continue }
+                let names = [checkoutName(path, repo: repo), checkoutName(overlap.other, repo: repo)]
+                notifier.post(title: "\(names[0]) and \(names[1]) would conflict",
+                              body: fresh.prefix(3).joined(separator: ", ") + (fresh.count > 3 ? " and \(fresh.count - 3) more" : ""),
+                              sessionID: session.id)
+            }
+        }
+    }
+
+    /// What the session's checkout shares with the others: its worktree's, or the main
+    /// checkout's when the session works there.
+    func overlaps(of session: Session) -> [Overlap] {
+        guard let repo = radarRepo(of: session) else { return [] }
+        return overlaps[repo]?[session.worktree?.path ?? repo] ?? []
+    }
+
+    /// The repository the session's checkout belongs to, as the radar knows it.
+    func radarRepo(of session: Session) -> String? {
+        if let worktree = session.worktree { return worktree.repoRoot }
+        let cwd = session.root.panes.first { $0.id == session.focusedPane }.map { runtime($0).cwd } ?? ""
+        return overlaps.keys.first { cwd == $0 || cwd.hasPrefix($0 + "/") }
+    }
+
+    func overlaps(ofCheckout path: String, repo: String) -> [Overlap] {
+        overlaps[repo]?[path] ?? []
+    }
+
+    /// The session working in a worktree folder.
+    func worktreeSession(at path: String) -> Session? {
+        allSessions.first { $0.worktree?.path == path }
+    }
+
+    /// The agent running in a session, if any.
+    func agent(of session: Session) -> AgentKind? {
+        session.root.panes.lazy.compactMap { self.runtime($0).agent }.first
+    }
+
+    /// "claude-a3f1", or the session's own title once it has one, or "the main checkout".
+    func checkoutName(_ path: String, repo: String) -> String {
+        if path == repo { return "the main checkout" }
+        return worktreeSession(at: path)?.title ?? (path as NSString).lastPathComponent
+    }
+
+    /// Tells the session's agent what the other checkout changes, so it keeps clear of it.
+    func tellAgent(about overlap: Overlap, in sessionID: UUID) {
+        guard let loc = location(of: sessionID) else { return }
+        let session = projects[loc.project].sessions[loc.session]
+        guard let pane = session.root.panes.first(where: { runtime($0).agent != nil }) else { return }
+        let repo = radarRepo(of: session) ?? ""
+        let name: String
+        if overlap.other == repo {
+            name = "whoever works in the main checkout"
+        } else if let other = worktreeSession(at: overlap.other), let agent = agent(of: other) {
+            name = "\(agent.displayName) (session \"\(other.title)\")"
+        } else {
+            name = "another session"
+        }
+        let prompt = OverlapPrompt.build(overlap, otherName: name, otherFolder: PaneContainer.abbreviate(overlap.other))
+        deliver(prompt, to: pane.id)
+        updateSession(session.id) { $0.focusedPane = pane.id }
     }
 
     // MARK: Git

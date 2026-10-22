@@ -38,17 +38,22 @@ final class TurnTracker {
 
     /// A commit of the whole working tree, untracked files included. It's built in a throwaway
     /// index, so neither the user's index nor their files are touched. Nothing refers to it;
-    /// git keeps it for weeks before pruning, far longer than an undo needs.
-    nonisolated static func snapshot(_ top: String) -> String? {
+    /// git keeps it for weeks before pruning, far longer than an undo needs. With `fixedDate`, the
+    /// same working tree always gives the same commit, so taking it again writes nothing new.
+    nonisolated static func snapshot(_ top: String, fixedDate: Bool = false) -> String? {
         let index = FileManager.default.temporaryDirectory.appendingPathComponent("kabuk-index-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: index) }
         // Starting from a copy of the real index lets git reuse its cached file stats.
         let real = Shell.git(["rev-parse", "--path-format=absolute", "--git-path", "index"], in: top).stdout
             .trimmingCharacters(in: .whitespacesAndNewlines)
         try? FileManager.default.copyItem(atPath: real, toPath: index.path)
-        let env = ["GIT_INDEX_FILE": index.path,
+        var env = ["GIT_INDEX_FILE": index.path,
                    "GIT_AUTHOR_NAME": "Kabuk", "GIT_AUTHOR_EMAIL": "kabuk@localhost",
                    "GIT_COMMITTER_NAME": "Kabuk", "GIT_COMMITTER_EMAIL": "kabuk@localhost"]
+        if fixedDate {
+            env["GIT_AUTHOR_DATE"] = "@1000000000 +0000"
+            env["GIT_COMMITTER_DATE"] = "@1000000000 +0000"
+        }
         guard Shell.git(["add", "-A"], in: top, environment: env).ok else { return nil }
         let tree = Shell.git(["write-tree"], in: top, environment: env)
         guard tree.ok else { return nil }

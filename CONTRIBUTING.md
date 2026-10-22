@@ -63,6 +63,7 @@ swift scripts/kabuk-debug.swift dump             # focus, sessions, pane status 
 
 The full list of commands is at the top of `Sources/Kabuk/DebugHooks.swift`. It includes:
 - `answer allow|deny|always|ask`, `showdiff [file]`, `failure`, `ask claude|codex`
+- `radar [show|hide|tell]`: the conflict radar's findings, written to `radar.txt`
 - `findquery`, `theme <id>`, `keys`, `key`, `select`, `opacity`, `caption`, `close`
 
 `snapshot` uses `cacheDisplay`, so it can't draw anything Metal or Core Animation puts on screen: the glass blur, the Metal background, the terminal text (SwiftTerm's Metal renderer) and the looping status animations. Check those by eye.

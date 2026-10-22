@@ -6,6 +6,14 @@ Changes that are on `main` but not released yet are listed under **Unreleased**.
 
 ## [Unreleased]
 
+### Added
+
+- **Conflict radar.** When two worktree sessions of the same repository change the same file, a warning appears on both rows in the sidebar before either is merged: amber while the changes still merge cleanly, red once merging both would conflict. Click it to see the files and the lines the other side changes, and **Tell Claude** (or any agent) to keep clear of them. Uncommitted changes count, and the main checkout is compared too. Review & Merge lists the same, and a new conflict sends a notification while you're looking elsewhere.
+
+### Fixed
+
+- Diff notes sent to an agent that is waiting for you, for example on a permission question, wait until its turn ends. They used to be typed into the question, where the return that sends them could answer it.
+
 ## [0.6.0] - 2026-10-22
 
 ### Added

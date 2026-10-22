@@ -183,6 +183,11 @@ private struct SessionRow: View {
                     .foregroundStyle(.white.opacity(selected || emphasized ? 0.95 : 0.72))
                     .lineLimit(1)
                     .truncationMode(.tail)
+                let overlaps = state.overlaps(of: session)
+                if !overlaps.isEmpty {
+                    OverlapBadge(session: session, overlaps: overlaps)
+                        .transition(.scale.combined(with: .opacity))
+                }
             }
             Spacer(minLength: 4)
             ActivityLabel(runtime: summary)

@@ -66,6 +66,18 @@ Claude can also hand a task to Codex, or to another Claude: ask it to, and it ru
 
 A worktree session's **Review & Merge** (context menu, palette, or when you close it) lists the branch's commits and every file it changed against your main checkout's branch. From there you can commit what's left, then merge, squash-merge or open a pull request with `gh`. A merge that hits conflicts is rolled back, so your main checkout is never left half-merged. Afterwards Kabuk can remove the worktree and branch. A subagent's worktree has the same review from its live view.
 
+### Conflict radar
+
+Worktrees keep agents apart while they work, but not when their branches are merged. Kabuk compares a repository's worktrees with each other and with the main checkout after every edit, uncommitted changes included, and puts a warning on the sessions that change the same file: amber while the changes still merge cleanly, red once merging both would conflict. It merges them in memory with `git merge-tree`, so no checkout, branch or index is touched.
+
+![Claude and Codex changing the same lines of server/routes.ts in two worktrees, with the radar's warning open](docs/screenshots/conflict-radar.jpg)
+
+Click the warning to see each file and the lines the other side changes. **Tell Claude** (or whichever agent runs there) sends those files and lines to the agent, so it keeps clear of them or asks you first. Like diff notes, the message waits while the agent is working or waiting for you. Review & Merge shows the same list, and a new conflict sends a notification while you're looking elsewhere. The radar sees changes to the same lines, not code that breaks without them, such as a call to a function the other branch renamed.
+
+![A red warning on both sessions, and the file and lines they'd conflict on](docs/screenshots/conflict-radar-close.jpg)
+
+![Review & Merge listing the conflict with the other worktree before the merge](docs/screenshots/conflict-review.jpg)
+
 ### Approve tool use from the sidebar
 
 When Claude asks for permission in a session you aren't looking at, the request waits in the sidebar with **Allow**, **Always** and **Deny**. The notification has Allow and Deny buttons too. If the pane is on screen, or you switch to it, Claude asks in the terminal as usual.
@@ -78,7 +90,7 @@ When an agent finishes a turn, a card lists the files it changed in that turn, w
 
 **Undo** puts every file the turn changed back the way it was, untracked files included, and moves the branch back if the agent committed. **Redo** brings the changes back.
 
-Hover a line in the diff to leave a note on it. **Send to Claude** sends all your notes as one prompt, with file, line and code. If the agent is still working, the notes wait until its turn ends.
+Hover a line in the diff to leave a note on it. **Send to Claude** sends all your notes as one prompt, with file, line and code. If the agent is still working or waiting for you, the notes wait until its turn ends.
 
 ![The turn summary card](docs/screenshots/turn-summary.jpg)
 

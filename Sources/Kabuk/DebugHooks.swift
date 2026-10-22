@@ -19,6 +19,9 @@ import SwiftUI
 ///   dev.kabuk.update (object)   "check" checks now, "whatsnew" shows the notes, "install" or "quit-install" installs
 ///                               the found update, "quit" quits; every command writes <dir>/update.txt with the update state
 ///   dev.kabuk.failure           writes <dir>/failure.txt: each pane's captured failure and its prompt
+///   dev.kabuk.radar (object)    writes <dir>/radar.txt: every session's overlaps with parallel checkouts;
+///                               "tell" first tells the first such session's agent about its first overlap,
+///                               "show" opens that session's overlap details, "hide" closes them
 ///   dev.kabuk.ask (object)      asks claude or codex about the first captured failure
 ///   dev.kabuk.skills            scans the focused pane's skills and writes them to <dir>/skills.txt
 ///   dev.kabuk.insertskill (object) types the focused agent's skill with that invocation at its prompt
@@ -237,6 +240,25 @@ enum DebugHooks {
             MainActor.assumeIsolated {
                 let text = state.failures.map { "pane \($0.key.uuidString.prefix(8))\n\($0.value.prompt)" }.joined(separator: "\n---\n")
                 try? text.write(to: URL(fileURLWithPath: dir).appendingPathComponent("failure.txt"), atomically: true, encoding: .utf8)
+            }
+        }
+        center.addObserver(forName: .init("dev.kabuk.radar"), object: nil, queue: .main) { note in
+            MainActor.assumeIsolated {
+                let found = state.allSessions.map { ($0, state.overlaps(of: $0)) }.filter { !$0.1.isEmpty }
+                switch (note.object as? String, found.first) {
+                case ("tell", let (session, list)?): state.tellAgent(about: list[0], in: session.id)
+                case ("show", let (session, _)?): state.overlapDetail = session.id
+                case ("hide", _): state.overlapDetail = nil
+                default: break
+                }
+                let text = found.map { session, list in
+                    "\(session.title) [\(session.worktree?.branch ?? "main checkout")]\n" + list.map { overlap in
+                        "  vs \(overlap.otherBranch): " + overlap.files.map {
+                            "\($0.path)\($0.conflict ? " CONFLICT" : "") \(Overlaps.describe($0.theirLines))"
+                        }.joined(separator: "; ")
+                    }.joined(separator: "\n")
+                }.joined(separator: "\n")
+                output("radar.txt", text.isEmpty ? "no overlaps\n" : text + "\n")
             }
         }
         center.addObserver(forName: .init("dev.kabuk.ask"), object: nil, queue: .main) { note in

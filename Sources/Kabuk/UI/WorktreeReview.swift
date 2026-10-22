@@ -63,6 +63,14 @@ struct WorktreeReviewSheet: View {
     private func content(_ summary: WorktreeSummary) -> some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
+                let overlaps = state.overlaps(ofCheckout: request.info.path, repo: request.info.repoRoot)
+                if !overlaps.isEmpty {
+                    OverlapList(session: request.sessionID.flatMap { id in state.allSessions.first { $0.id == id } },
+                                repo: request.info.repoRoot, overlaps: overlaps, offersReview: false)
+                        .padding(10)
+                        .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Color.white.opacity(0.04)))
+                        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(Color.white.opacity(0.08)))
+                }
                 section(summary.commits.isEmpty ? "No commits yet" : "\(summary.commits.count) commit\(summary.commits.count == 1 ? "" : "s")") {
                     ForEach(summary.commits) { commit in
                         HStack(spacing: 10) {
@@ -197,6 +205,8 @@ struct WorktreeReviewSheet: View {
             Worktrees.merge(info, summary: summary, squash: squash)
         } then: {
             withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) { merged = summary.target }
+            // The main checkout moved; the other worktrees now meet this branch's work there.
+            state.refreshRadar(request.info.repoRoot, delay: 0.3)
         }
     }
 
