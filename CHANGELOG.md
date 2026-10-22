@@ -6,6 +6,8 @@ Changes that are on `main` but not released yet are listed under **Unreleased**.
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-10-22
+
 ### Added
 
 - **Conflict radar.** When two worktree sessions of the same repository change the same file, a warning appears on both rows in the sidebar before either is merged: amber while the changes still merge cleanly, red once merging both would conflict. Click it to see the files and the lines the other side changes, and **Tell Claude** (or any agent) to keep clear of them. Uncommitted changes count, and the main checkout is compared too. Review & Merge lists the same, and a new conflict sends a notification while you're looking elsewhere.
@@ -115,7 +117,8 @@ The first release.
 - Seven themes plus your own JSON themes, three transparency levels, Liquid Glass on macOS 26.
 - Split panes, git badges, cost tracking, notifications, a Dock badge and session restore.
 
-[Unreleased]: https://github.com/egemenagustos/Kabuk/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/egemenagustos/Kabuk/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/egemenagustos/Kabuk/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/egemenagustos/Kabuk/compare/v0.5.1...v0.6.0
 [0.5.1]: https://github.com/egemenagustos/Kabuk/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/egemenagustos/Kabuk/compare/v0.4.0...v0.5.0

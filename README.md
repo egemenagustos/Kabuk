@@ -29,15 +29,10 @@ Kabuk (Turkish for *shell*) is a glassy, dark terminal that knows when Claude Co
 ## What's new
 
 <!-- whats-new:start -->
-**0.6.0** (2026-10-22):
+**0.7.0** (2026-10-22):
 
-- Added: **More agents.** OpenCode, Gemini CLI, Antigravity CLI and Copilot CLI get an integration like Claude's and Codex's: sidebar status, notifications, the turn summary with Undo, worktree sessions, and Claude can hand them work. Copilot's and OpenCode's permission requests wait in the sidebar. Install them from **Install Agent Integrations…**, which sets up the agents Kabuk finds on your `PATH`.
-- Added: **Agents without hooks.** Cursor Agent, Amp, Aider, Goose, Droid and Qwen Code are recognized by name, and you can add your own in `agents.json`. Kabuk guesses their turns from return, the terminal notifications they send (OSC 9, 99, 777) and a few quiet seconds.
-- Added: **New … Worktree Session** in the palette for every agent Kabuk finds, and an ⋯ menu on a failed command's chip to ask any of them.
-- Changed: Inside Kabuk, `opencode` runs with a private server (`--standalone`), so its plugin reports from the pane it runs in.
-- Changed: The integration menu items are now **Install Agent Integrations…** and **Remove Agent Integrations**.
-- Fixed: macOS no longer asks again for the permissions you gave Kabuk after every update. Kabuk was signed ad hoc, which macOS takes for a new app with each build; it's now signed with the same certificate every time. The update to this version asks once more, the ones after it don't.
-- Fixed: ⌘K, ⌘R, ⌘F and the other fields that open over a pane take the keyboard focus reliably. Sometimes the terminal kept the keys.
+- Added: **Conflict radar.** When two worktree sessions of the same repository change the same file, a warning appears on both rows in the sidebar before either is merged: amber while the changes still merge cleanly, red once merging both would conflict. Click it to see the files and the lines the other side changes, and **Tell Claude** (or any agent) to keep clear of them. Uncommitted changes count, and the main checkout is compared too. Review & Merge lists the same, and a new conflict sends a notification while you're looking elsewhere.
+- Fixed: Diff notes sent to an agent that is waiting for you, for example on a permission question, wait until its turn ends. They used to be typed into the question, where the return that sends them could answer it.
 
 See **[CHANGELOG.md](CHANGELOG.md)** for every version and what is on `main` but not released yet.
 <!-- whats-new:end -->
