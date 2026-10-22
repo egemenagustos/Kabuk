@@ -16,6 +16,8 @@ public enum StatusReducer {
            !subagentLifecycle(event), s.permission?.agent == event.agent {
             s.permission = nil
         }
+        if event.source != "claude", AgentEvent.progress.contains(event.event) { s.permission = nil }
+        if AgentKind(rawValue: event.source) != nil, AgentEvent.fromHooks(event.event) { s.hooked = true }
 
         switch (event.source, event.event) {
         case ("shell", "start"):
@@ -23,13 +25,14 @@ public enum StatusReducer {
             s.command = cmd
             s.tag = CommandInfo.tag(cmd)
             s.unseen = false
+            s.hooked = false
             if let agent = CommandInfo.agent(cmd) {
                 s.agent = agent
                 s.agentWorkTime = 0
                 s.tokens = nil
                 s.turnStartedAt = nil
-                if agent == .codex && CommandInfo.codexStartsWithPrompt(cmd) {
-                    s.status = .agentWorking(.codex, since: now)
+                if CommandInfo.startsWithPrompt(cmd, agent: agent) {
+                    s.status = .agentWorking(agent, since: now)
                     s.turnStartedAt = now
                 } else {
                     s.status = .agentReady(agent)
@@ -49,6 +52,7 @@ public enum StatusReducer {
             endTurn(&s, now: now)
             s.permission = nil
             s.agent = nil
+            s.hooked = false
             s.tag = "zsh"
             s.subagents = []
             s.launches = []
@@ -153,6 +157,10 @@ public enum StatusReducer {
             s.tag = "codex"
             s.status = .agentNeedsYou(.codex, message: event.message)
 
+        case (let source, let name) where AgentEvent.all.contains(name):
+            guard let agent = AgentKind(rawValue: source) else { return state }
+            return reduceAgent(s, event, agent: agent, now: now) ?? state
+
         default:
             return state
         }
@@ -160,14 +168,92 @@ public enum StatusReducer {
         return s
     }
 
+    /// The events of agents other than Claude and Codex, as `kabuk-hook` translates their hooks,
+    /// plus the guesses Kabuk makes for agents whose hooks don't report.
+    static func reduceAgent(_ state: PaneRuntime, _ event: HookEvent, agent: AgentKind, now: Date) -> PaneRuntime? {
+        var s = state
+        // A guess only counts while no hook has spoken, and only for agents Kabuk guesses for.
+        if AgentEvent.guesses.contains(event.event) {
+            guard agent.profile.guessesTurns, !s.hooked, s.agent == agent else { return nil }
+        }
+        switch event.event {
+        case AgentEvent.turnStart:
+            s.agent = agent
+            s.tag = agent.rawValue
+            s.unseen = false
+            if let prompt = event.userPrompt { s.lastPrompt = prompt }
+            s.status = .agentWorking(agent, since: s.turnStartedAt ?? now)
+            if s.turnStartedAt == nil { s.turnStartedAt = now }
+
+        case AgentEvent.tool:
+            s.agent = agent
+            s.tag = agent.rawValue
+            if case .agentWorking = s.status {} else {
+                s.status = .agentWorking(agent, since: s.turnStartedAt ?? now)
+            }
+            if s.turnStartedAt == nil { s.turnStartedAt = now }
+
+        case AgentEvent.permission:
+            s.agent = agent
+            s.tag = agent.rawValue
+            let tool = event.tool ?? "Tool"
+            let detail = event.detail ?? ""
+            if let id = event.request {
+                s.permission = PermissionPrompt(id: id, tool: tool, detail: detail, canAlwaysAllow: false)
+            }
+            s.status = .agentNeedsYou(agent, message: detail.isEmpty ? "Allow \(tool)?" : "Allow \(tool): \(detail)")
+
+        case AgentEvent.needsYou:
+            s.agent = agent
+            s.tag = agent.rawValue
+            s.status = .agentNeedsYou(agent, message: event.message)
+
+        case AgentEvent.notification:
+            // A terminal notification: a question for the user, or the agent saying it's done.
+            if AgentEvent.asksForInput(event.message) {
+                s.status = .agentNeedsYou(agent, message: event.message)
+            } else {
+                guard s.status.isBusy || s.status.needsYou || s.turnStartedAt != nil else { return nil }
+                finishTurn(&s, agent: agent, prompt: nil, now: now)
+            }
+
+        case AgentEvent.quiet:
+            guard case .agentWorking = s.status else { return nil }
+            finishTurn(&s, agent: agent, prompt: nil, now: now)
+
+        case AgentEvent.turnEnd:
+            finishTurn(&s, agent: agent, prompt: event.userPrompt, now: now)
+
+        default:
+            return nil
+        }
+        s.lastActivity = now
+        return s
+    }
+
+    static func finishTurn(_ s: inout PaneRuntime, agent: AgentKind, prompt: String?, now: Date) {
+        if let start = s.turnStartedAt {
+            s.lastDuration = now.timeIntervalSince(start)
+        } else if case .agentWorking(_, let since) = s.status {
+            s.lastDuration = now.timeIntervalSince(since)
+        }
+        endTurn(&s, now: now)
+        s.agent = agent
+        s.tag = agent.rawValue
+        if let prompt { s.lastPrompt = prompt }
+        s.status = .succeeded(finishedAt: now)
+    }
+
     /// The user pressed return inside a pane. Codex has no "turn started" hook, so this is
-    /// how a Codex pane learns it is working again.
+    /// how a Codex pane learns it is working again; so do agents whose hooks haven't reported.
     public static func submitted(_ state: PaneRuntime, now: Date = Date()) -> PaneRuntime {
-        guard state.agent == .codex else { return state }
+        guard let agent = state.agent else { return state }
+        let profile = agent.profile
+        guard !profile.reportsTurnStart || (profile.guessesTurns && !state.hooked) else { return state }
         switch state.status {
         case .agentReady, .agentNeedsYou, .succeeded, .failed:
             var s = state
-            s.status = .agentWorking(.codex, since: now)
+            s.status = .agentWorking(agent, since: now)
             s.turnStartedAt = now
             s.unseen = false
             s.lastActivity = now

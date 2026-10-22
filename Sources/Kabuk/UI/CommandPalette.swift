@@ -142,12 +142,12 @@ struct CommandPalette: View {
         var items = [
             Item(id: "new", title: "New Session", subtitle: "⌘T", symbol: "plus", status: nil) { s.newSession() },
             Item(id: "open", title: "Open Project…", subtitle: "⌘O", symbol: "folder", status: nil) { s.chooseProject() },
-            Item(id: "wt-claude", title: "New Claude Worktree Session", subtitle: "⌥⌘T", symbol: "square.stack.3d.down.right", status: nil) {
-                s.newWorktreeSession(agent: .claude)
-            },
-            Item(id: "wt-codex", title: "New Codex Worktree Session", subtitle: "worktree", symbol: "square.stack.3d.down.right", status: nil) {
-                s.newWorktreeSession(agent: .codex)
-            },
+        ] + s.installedAgents.map { agent in
+            Item(id: "wt-\(agent.rawValue)", title: "New \(agent.displayName) Worktree Session",
+                 subtitle: agent == .claude ? "⌥⌘T" : "worktree", symbol: "square.stack.3d.down.right", status: nil) {
+                s.newWorktreeSession(agent: agent)
+            }
+        } + [
             Item(id: "wt-shell", title: "New Worktree Shell", subtitle: "worktree", symbol: "square.stack.3d.down.right", status: nil) {
                 s.newWorktreeSession(agent: nil)
             },
@@ -162,10 +162,10 @@ struct CommandPalette: View {
                  subtitle: "Metal", symbol: "sparkles", status: nil) { s.toggleAnimatedBackground() },
             Item(id: "font-up", title: "Bigger Text", subtitle: "⌘+", symbol: "textformat.size.larger", status: nil) { s.fontSize = min(s.fontSize + 1, 28) },
             Item(id: "font-down", title: "Smaller Text", subtitle: "⌘-", symbol: "textformat.size.smaller", status: nil) { s.fontSize = max(s.fontSize - 1, 9) },
-            Item(id: "install", title: "Install Claude/Codex Integration", subtitle: "hooks", symbol: "bolt.horizontal", status: nil) {
-                IntegrationUI.install()
+            Item(id: "install", title: "Install Agent Integrations", subtitle: "hooks", symbol: "bolt.horizontal", status: nil) {
+                IntegrationUI.install(installed: s.installedAgents)
             },
-            Item(id: "uninstall", title: "Remove Claude/Codex Integration", subtitle: "hooks", symbol: "bolt.slash", status: nil) {
+            Item(id: "uninstall", title: "Remove Agent Integrations", subtitle: "hooks", symbol: "bolt.slash", status: nil) {
                 IntegrationUI.uninstall()
             },
         ]

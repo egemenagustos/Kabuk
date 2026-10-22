@@ -1,16 +1,5 @@
 import Foundation
 
-public enum AgentKind: String, Codable, Sendable, CaseIterable {
-    case claude, codex
-
-    public var displayName: String {
-        switch self {
-        case .claude: return "Claude"
-        case .codex: return "Codex"
-        }
-    }
-}
-
 public enum PaneStatus: Equatable, Sendable {
     case idle
     case running(command: String, startedAt: Date)
@@ -51,6 +40,8 @@ public struct PaneRuntime: Equatable, Sendable {
     public var status: PaneStatus = .idle
     public var tag: String = "zsh"
     public var agent: AgentKind?
+    /// The agent's hooks have reported since it started, so Kabuk stops guessing its turns.
+    public var hooked = false
     public var command: String?
     public var cwd: String
     public var lastPrompt: String?

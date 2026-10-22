@@ -6,6 +6,17 @@ Changes that are on `main` but not released yet are listed under **Unreleased**.
 
 ## [Unreleased]
 
+### Added
+
+- **More agents.** OpenCode, Gemini CLI, Antigravity CLI and Copilot CLI get an integration like Claude's and Codex's: sidebar status, notifications, the turn summary with Undo, worktree sessions, and Claude can hand them work. Copilot's and OpenCode's permission requests wait in the sidebar. Install them from **Install Agent Integrations…**, which sets up the agents Kabuk finds on your `PATH`.
+- **Agents without hooks.** Cursor Agent, Amp, Aider, Goose, Droid and Qwen Code are recognized by name, and you can add your own in `agents.json`. Kabuk guesses their turns from return, the terminal notifications they send (OSC 9, 99, 777) and a few quiet seconds.
+- **New … Worktree Session** in the palette for every agent Kabuk finds, and an ⋯ menu on a failed command's chip to ask any of them.
+
+### Changed
+
+- Inside Kabuk, `opencode` runs with a private server (`--standalone`), so its plugin reports from the pane it runs in.
+- The integration menu items are now **Install Agent Integrations…** and **Remove Agent Integrations**.
+
 ## [0.5.1] - 2026-10-21
 
 ### Fixed

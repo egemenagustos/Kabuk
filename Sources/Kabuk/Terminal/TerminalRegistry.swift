@@ -44,7 +44,10 @@ final class TerminalRegistry: NSObject, LocalProcessTerminalViewDelegate {
     var onExit: ((UUID) -> Void)?
     var onCommandStart: ((UUID) -> Void)?
     var onFailure: ((UUID, CapturedFailure) -> Void)?
+    /// A terminal notification (OSC 9, 99, 777) from something running in the pane.
+    var onNotification: ((UUID, String) -> Void)?
     private var captures: [UUID: OutputCapture] = [:]
+    private var signals: [UUID: AgentSignals] = [:]
     /// SwiftTerm keeps 500 lines by default; a terminal you live in needs more.
     static let scrollback = 10_000
     var fontSize: CGFloat = 13 {
@@ -70,6 +73,9 @@ final class TerminalRegistry: NSObject, LocalProcessTerminalViewDelegate {
         }, onFailure: { [weak self] failure in
             self?.onFailure?(paneID, failure)
         })
+        signals[paneID] = AgentSignals(view: view) { [weak self] text in
+            self?.onNotification?(paneID, text)
+        }
 
         let shell = ShellIntegration.userShell
         let directory = FileManager.default.fileExists(atPath: cwd) ? cwd : NSHomeDirectory()
@@ -78,6 +84,11 @@ final class TerminalRegistry: NSObject, LocalProcessTerminalViewDelegate {
                           execName: "-" + (shell as NSString).lastPathComponent,
                           currentDirectory: directory)
         return view
+    }
+
+    /// When the pane last printed anything.
+    func lastOutput(_ paneID: UUID) -> Date? {
+        signals[paneID]?.quietSince
     }
 
     /// Each running pane's shell process id.
@@ -91,6 +102,7 @@ final class TerminalRegistry: NSObject, LocalProcessTerminalViewDelegate {
     func close(_ paneID: UUID) {
         closed.insert(paneID)
         captures[paneID] = nil
+        signals[paneID] = nil
         guard let view = views.removeValue(forKey: paneID) else { return }
         view.processDelegate = nil
         view.terminate()

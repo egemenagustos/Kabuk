@@ -4,12 +4,13 @@ import SwiftUI
 
 /// What the background should feel like, from the selected session's state.
 enum BackdropMood: Equatable {
-    case calm, running, claude, codex, needsYou
+    case calm, running, needsYou
+    case agent(AgentKind)
 }
 
 /// Slow drifting light behind the panes, drawn with Metal. Its colors and speed follow the
-/// mood: warm and quicker while Claude works, teal for Codex, a pulsing amber when an agent
-/// waits for you.
+/// mood: warm and quicker while Claude works, teal for Codex, each other agent's own color, a
+/// pulsing amber when an agent waits for you.
 struct AnimatedBackdrop: NSViewRepresentable {
     let mood: BackdropMood
     let theme: TerminalTheme
@@ -116,8 +117,8 @@ final class BackdropRenderer: NSObject, MTKViewDelegate {
         switch mood {
         case .calm: target = (rgb(theme.ansi[4]), rgb(theme.ansi[5]), 0.16, 1, 0)
         case .running: target = (blue, rgb(theme.ansi[6]), 0.22, 1.8, 0)
-        case .claude: target = (claude, rgb(theme.ansi[5]), 0.32, 2.6, 0)
-        case .codex: target = (codex, rgb(theme.ansi[4]), 0.32, 2.6, 0)
+        case .agent(.codex): target = (codex, rgb(theme.ansi[4]), 0.32, 2.6, 0)
+        case .agent(let agent): target = (agent == .claude ? claude : rgb(agent.profile.color), rgb(theme.ansi[5]), 0.32, 2.6, 0)
         case .needsYou: target = (amber, claude, 0.28, 1.2, 1)
         }
     }

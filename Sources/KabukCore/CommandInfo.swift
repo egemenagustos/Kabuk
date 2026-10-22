@@ -17,12 +17,6 @@ public enum CommandInfo {
         "ssh": "ssh", "mosh": "ssh",
         "git": "git", "gh": "git", "lazygit": "git",
         "make": "make", "brew": "brew",
-        "claude": "claude", "codex": "codex",
-    ]
-
-    private static let codexSubcommands: Set<String> = [
-        "exec", "e", "login", "logout", "mcp", "resume", "apply", "a", "completion", "debug", "help",
-        "proto", "sandbox", "app-server", "cloud", "features",
     ]
 
     /// Steps that only prepare the shell; `cd app && npm run dev` is about npm.
@@ -49,18 +43,22 @@ public enum CommandInfo {
 
     public static func agent(_ command: String) -> AgentKind? {
         guard let program = program(command) else { return nil }
-        return AgentKind(rawValue: program)
+        return AgentRegistry.agent(program: program)
     }
 
+    /// An agent's tag is its name: `agy` shows as "antigravity".
     public static func tag(_ command: String) -> String {
         guard let program = program(command) else { return "zsh" }
+        if let agent = AgentRegistry.agent(program: program) { return agent.rawValue }
         return tagMap[program] ?? program
     }
 
     /// `codex "fix the bug"` starts working right away; bare `codex` waits for input.
-    public static func codexStartsWithPrompt(_ command: String) -> Bool {
+    public static func startsWithPrompt(_ command: String, agent: AgentKind) -> Bool {
+        let profile = agent.profile
+        guard profile.argumentStartsTurn else { return false }
         let args = words(command).dropFirst()
         guard let first = args.first(where: { !$0.hasPrefix("-") }) else { return false }
-        return !codexSubcommands.contains(first)
+        return !profile.subcommands.contains(first)
     }
 }

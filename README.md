@@ -17,7 +17,7 @@ Kabuk (Turkish for *shell*) is a glassy, dark terminal that knows when Claude Co
 - [What's new](#whats-new)
 - [Features](#features)
 - [Install](#install)
-- [Connect Claude Code and Codex](#connect-claude-code-and-codex)
+- [Connect your agents](#connect-your-agents)
 - [Shortcuts](#shortcuts)
 - [Status at a glance](#status-at-a-glance)
 - [Customizing](#customizing)
@@ -84,6 +84,14 @@ When a command fails, Kabuk has already captured its output. The **Ask Claude** 
 
 ![A failed deploy with the Ask Claude chip](docs/screenshots/failure.jpg)
 
+### Any coding agent
+
+Besides Claude Code and Codex, Kabuk works with **OpenCode**, **Gemini CLI**, **Antigravity CLI** (`agy`) and **Copilot CLI**: install their integration and they get the same sidebar status, notifications, turn summary with Undo, and worktree sessions. Copilot's and OpenCode's permission requests wait in the sidebar like Claude's. Each agent has its own color.
+
+Other agents (Cursor Agent, Amp, Aider, Goose, Droid, Qwen Code, or your own in `agents.json`) are recognized by name, without hooks. Kabuk guesses their turns: pressing return in the pane starts one, and the terminal notification the agent sends (OSC 9, 99 or 777), or a few quiet seconds, ends it. A notification that asks something marks the pane as waiting for you.
+
+The palette has a **New … Worktree Session** for every agent it finds on your `PATH`, a failed command's chip can go to any of them (⋯), and Claude can hand work to any of them.
+
 ### Skills at hand
 
 The book button in an agent pane's header lists the skills that agent can load: Claude's from `~/.claude/skills`, the project's `.claude/skills`, enabled plugins and claude.ai, and Codex's from `~/.agents/skills`, `~/.codex/skills`, the project and the built-in ones. Pick one and Kabuk types `/name` (Claude) or `$name` (Codex) at the agent's prompt without sending it, so you can write your request after it. In the palette, start with `/` or `$` to search only skills. Right-click a skill to open its SKILL.md.
@@ -126,7 +134,7 @@ Seven built-in themes (Kabuk, Tokyo Night, Dracula, Nord, Gruvbox, Rosé Pine, S
 
 - **Split panes**: ⌘D and ⇧⌘D. Drag the gap between panes to resize them.
 - **Git badges** for each pane: branch, ahead/behind, `+added −removed` and untracked files.
-- **Cost tracking**: per session in the sidebar, and today's total in the status bar. Hover for Claude's and Codex's share and the last seven days.
+- **Cost tracking** for Claude and Codex: per session in the sidebar, and today's total in the status bar. Hover for each agent's share and the last seven days.
 - **Plan limits**: how much of the Claude and Codex 5-hour and weekly limits you've used, as dots for the hours and dashes for the days in the status bar. Hover for percentages and reset times.
 - **Notifications and a Dock badge** when an agent finishes or needs you, or a long command ends, while you're looking elsewhere.
 - **Session restore**: sessions, splits and folders come back when you relaunch.
@@ -163,14 +171,18 @@ From 0.2.0 on, Kabuk keeps itself up to date:
 
 Kabuk runs your login shell. The zsh integration (status, failed-output capture, history) is zsh-only. Other shells work as plain terminals.
 
-## Connect Claude Code and Codex
+## Connect your agents
 
-Choose **Kabuk → Install Claude/Codex Integration…**, or press ⌘K and type "integration".
+Choose **Kabuk → Install Agent Integrations…**, or press ⌘K and type "integration". Claude Code and Codex are always set up; the other agents when Kabuk finds them on your `PATH`.
 
 - **Claude Code** gets `UserPromptSubmit`, `PreToolUse` (only for starting subagents), `PostToolUse`, `Notification`, `Stop`, `PermissionRequest`, `SubagentStart` and `SubagentStop` hooks in `~/.claude/settings.json`, a status line command that passes your plan limits to Kabuk (it still runs your own status line, if you have one), and the `kabuk-delegate` skill in `~/.claude/skills`. When a newer Kabuk needs more hooks, it offers to update them.
 - **Codex** gets a `notify` line in `~/.codex/config.toml`.
+- **OpenCode** (2.x) gets a plugin, `~/.config/opencode/plugins/kabuk.js`. OpenCode normally runs its sessions on a shared background service, where the plugin can't tell which pane it serves, so inside Kabuk `opencode` starts with a private server (`--standalone`).
+- **Gemini CLI** gets `BeforeAgent`, `AfterTool`, `Notification` and `AfterAgent` hooks in `~/.gemini/settings.json`.
+- **Antigravity CLI** gets a `kabuk` set of `PreInvocation`, `PostToolUse` and `Stop` hooks in `~/.gemini/config/hooks.json`, which call `~/.gemini/config/kabuk-hook.sh`.
+- **Copilot CLI** gets its own hooks file, `~/.copilot/hooks/kabuk.json`.
 
-The first install backs up both files as `*.kabuk-backup`. The hooks only do something inside Kabuk panes. In any other terminal they exit immediately. The same menu removes them.
+The first install backs up each settings file it changes as `*.kabuk-backup`. The hooks only do something inside Kabuk panes. In any other terminal they exit immediately. The same menu removes them.
 
 ## Shortcuts
 
@@ -228,6 +240,16 @@ Claude and Codex model prices are built in, at standard-tier API list prices. To
 
 The cost is what the same usage would cost on the API. On a Claude or ChatGPT subscription you aren't billed per token. Even on the API it is an estimate: long-context and fast-mode surcharges aren't included, and only sessions run in Kabuk are counted.
 
+### Your own agents
+
+To have Kabuk recognize an agent it doesn't know, add `~/Library/Application Support/Kabuk/agents.json` and restart Kabuk. `program` is the command that starts it, `color` its color in the sidebar, and `prompt` how Kabuk hands it a task: `"argument"` (`kiro-cli "task"`), a flag such as `"-p"`, or left out to have Kabuk type the task once the agent is up.
+
+```json
+{ "agents": [{ "name": "kiro", "program": "kiro-cli", "color": "#ff9900", "prompt": "argument" }] }
+```
+
+Such agents get the guessed turns described under [Any coding agent](#any-coding-agent).
+
 ### Files
 
 Everything lives in `~/Library/Application Support/Kabuk/`:
@@ -239,6 +261,7 @@ Everything lives in `~/Library/Application Support/Kabuk/`:
 | `usage.json` | The cost ledger |
 | `limits.json` | The latest Claude and Codex plan limits |
 | `pricing.json` | Optional price overrides |
+| `agents.json` | Optional: more agents for Kabuk to recognize |
 | `themes/` | Your themes |
 | `shell/` | The zsh integration, rewritten at launch |
 | `kabuk.sock` | The socket that hooks talk to |

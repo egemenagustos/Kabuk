@@ -144,6 +144,22 @@ enum ShellIntegration {
       esac
     }
 
+    # OpenCode also runs its sessions on a shared background service, and its plugins there
+    # don't see this pane. In Kabuk each opencode gets a private server (--standalone), so
+    # Kabuk's plugin reports from this pane.
+    function opencode {
+      if (( ${@[(Ie)--standalone]} || ${@[(Ie)--server]} )); then
+        command opencode "$@"
+        return
+      fi
+      case $1 in
+        run) shift; command opencode run --standalone "$@" ;;
+        upgrade|update|uninstall|acp|api|debug|auth|mcp|plugin|models|stats|session|service|reload|pair|serve|mini)
+          command opencode "$@" ;;
+        *) command opencode --standalone "$@" ;;
+      esac
+    }
+
     # Run first so $? is still the command's exit code.
     precmd_functions=(_kabuk_precmd $precmd_functions)
     preexec_functions+=(_kabuk_preexec)

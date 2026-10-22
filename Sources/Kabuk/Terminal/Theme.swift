@@ -14,7 +14,7 @@ enum Theme {
     static let dim = SwiftUI.Color.white.opacity(0.45)
 
     static func color(for agent: AgentKind) -> SwiftUI.Color {
-        agent == .claude ? claude : codex
+        color(agent.profile.color)
     }
 
     static func terminalFont(size: CGFloat) -> NSFont {

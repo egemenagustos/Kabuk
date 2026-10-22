@@ -102,6 +102,11 @@ final class AppState: ObservableObject {
     private var permissionReplies: [String: SocketServer.Reply] = [:]
     /// Commands to type into a pane once its shell shows the first prompt.
     private var pendingCommands: [UUID: String] = [:]
+    /// Tasks for agents that take no task on the command line, typed once the agent is up.
+    private var startupPrompts: [UUID: String] = [:]
+    /// The agents whose programs the login shell finds, for menus; Claude and Codex until it answers.
+    @Published private(set) var installedAgents: [AgentKind] = [.claude, .codex]
+    private var quietTimer: Timer?
     private var saveWork: DispatchWorkItem?
     private var observers: [NSObjectProtocol] = []
 
@@ -109,6 +114,7 @@ final class AppState: ObservableObject {
     static let longCommand: TimeInterval = 10
 
     init(snapshot: WorkspaceSnapshot?) {
+        AgentLocator.loadUserAgents()
         let home = NSHomeDirectory()
         var snapshot = snapshot ?? WorkspaceSnapshot(projects: [], selectedSession: nil)
         if snapshot.projects.allSatisfy({ $0.sessions.isEmpty }) {
@@ -148,6 +154,11 @@ final class AppState: ObservableObject {
         ports.start()
 
         terminals.onSubmit = { [weak self] in self?.paneSubmitted($0) }
+        terminals.onNotification = { [weak self] id, text in self?.paneNotified(id, text) }
+        quietTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.checkQuietPanes() }
+        }
+        AgentLocator.installed { [weak self] agents in self?.installedAgents = agents }
         terminals.onExit = { [weak self] in self?.closePane($0) }
         notifier.onOpenSession = { [weak self] id in
             NSApp.activate(ignoringOtherApps: true)
@@ -350,8 +361,9 @@ final class AppState: ObservableObject {
     /// `kabuk-hook spawn`: an agent asked for another agent in its own worktree. The session
     /// appears under the caller's without taking the user away from what they're looking at.
     private func spawn(_ event: HookEvent, from paneID: UUID, in session: Session, reply: SocketServer.Reply?) {
-        guard let agent = event.kind.flatMap(AgentKind.init(rawValue:)) else {
-            reply?(HookReply(error: "Unknown agent \(event.kind ?? ""); use claude or codex."))
+        guard let agent = event.kind.flatMap(AgentKind.init(rawValue:)) ?? event.kind.flatMap(AgentRegistry.agent(program:)) else {
+            let names = installedAgents.map(\.rawValue).joined(separator: ", ")
+            reply?(HookReply(error: "Unknown agent \(event.kind ?? ""); use one of: \(names)."))
             return
         }
         let cwd = event.cwd ?? runtimes[paneID]?.cwd ?? NSHomeDirectory()
@@ -364,11 +376,12 @@ final class AppState: ObservableObject {
                 case .failure(let failure):
                     reply?(HookReply(error: failure.localizedDescription))
                 case .success(let info):
-                    let command = prompt.isEmpty ? agent.rawValue : Self.agentCommand(agent, prompt: prompt, name: "spawn")
+                    let launch = prompt.isEmpty ? nil : Self.agentLaunch(agent, prompt: prompt, name: "spawn")
                     // Named after its task; the command line that starts it says nothing.
                     let task = prompt.split(whereSeparator: \.isNewline).first.map { $0.trimmingCharacters(in: .whitespaces) } ?? ""
                     let title = task.isEmpty ? nil : (task.count > 42 ? String(task.prefix(40)) + "…" : task)
-                    self.addWorktreeSession(info, agent: agent, command: command, title: title, parent: session.id,
+                    self.addWorktreeSession(info, agent: agent, command: launch?.command, typed: launch?.typed, title: title,
+                                            parent: session.id,
                                             parentPane: paneID, select: false)
                     reply?(HookReply(worktree: info.path, branch: info.branch))
                 }
@@ -376,7 +389,8 @@ final class AppState: ObservableObject {
         }
     }
 
-    private func addWorktreeSession(_ info: WorktreeInfo, agent: AgentKind?, command: String? = nil, title: String? = nil,
+    private func addWorktreeSession(_ info: WorktreeInfo, agent: AgentKind?, command: String? = nil, typed: String? = nil,
+                                    title: String? = nil,
                                     parent: UUID? = nil, parentPane: UUID? = nil, select: Bool = true) {
         // Compared with symlinks resolved: a project opened as /tmp/x is git's /private/tmp/x.
         let repo = URL(fileURLWithPath: info.repoRoot).resolvingSymlinksInPath().path
@@ -386,7 +400,8 @@ final class AppState: ObservableObject {
         }()
         let session = Session(title: title ?? info.name, autoTitle: title == nil, cwd: info.path, worktree: info, parent: parent,
                               parentPane: parentPane)
-        if let command = command ?? agent?.rawValue { pendingCommands[session.focusedPane] = command }
+        if let command = command ?? agent?.profile.program { pendingCommands[session.focusedPane] = command }
+        if let typed { startupPrompts[session.focusedPane] = typed }
         withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
             projects[projectIndex].sessions.append(session)
             if select { selectedSessionID = session.id }
@@ -516,12 +531,13 @@ final class AppState: ObservableObject {
     // MARK: Panes
 
     /// Splits the focused pane (or `paneID`), optionally running `command` in the new one.
-    func split(_ axis: SplitAxis, from paneID: UUID? = nil, command: String? = nil) {
+    func split(_ axis: SplitAxis, from paneID: UUID? = nil, command: String? = nil, typed: String? = nil) {
         guard let session = paneID.flatMap({ session(containing: $0) }) ?? selectedSession else { return }
         let focused = paneID ?? session.focusedPane
         let cwd = runtimes[focused]?.cwd ?? session.root.panes.first { $0.id == focused }?.cwd ?? NSHomeDirectory()
         let pane = Pane(cwd: cwd)
         if let command { pendingCommands[pane.id] = command }
+        if let typed { startupPrompts[pane.id] = typed }
         withAnimation(.spring(response: 0.38, dampingFraction: 0.82)) {
             updateSession(session.id) {
                 $0.root = $0.root.splitting(focused, axis: axis, newPane: pane)
@@ -616,7 +632,7 @@ final class AppState: ObservableObject {
         var new = old
         new.permission = nil
         if decision != .ask {
-            new.status = .agentWorking(.claude, since: old.turnStartedAt ?? Date())
+            new.status = .agentWorking(old.agent ?? .claude, since: old.turnStartedAt ?? Date())
         }
         withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) { runtimes[paneID] = new }
         updateBadge()
@@ -633,6 +649,37 @@ final class AppState: ObservableObject {
         guard let session = session(containing: paneID), let old = runtimes[paneID] else { return }
         let new = StatusReducer.submitted(old)
         if new != old { apply(new, to: paneID, old: old, session: session, event: nil) }
+    }
+
+    /// A terminal notification from the pane's agent; for agents without hooks, it's how they say
+    /// they're done or waiting.
+    private func paneNotified(_ paneID: UUID, _ text: String) {
+        guard let agent = runtimes[paneID]?.agent else { return }
+        handle(HookEvent(pane: paneID.uuidString, source: agent.rawValue, event: AgentEvent.notification, message: text))
+    }
+
+    /// How long an agent without hooks prints nothing before its turn counts as over. Agents show a
+    /// spinner while they work, so silence means they stopped.
+    static let quietTurnEnd: TimeInterval = 6
+    /// An agent that was just started has drawn its screen once it's this quiet.
+    static let quietStartup: TimeInterval = 1.5
+
+    private func checkQuietPanes() {
+        let now = Date()
+        for (paneID, runtime) in runtimes {
+            guard let agent = runtime.agent, let output = terminals.lastOutput(paneID) else { continue }
+            let quiet = now.timeIntervalSince(output)
+            if case .agentReady = runtime.status, quiet >= Self.quietStartup,
+               now.timeIntervalSince(runtime.lastActivity) >= Self.quietStartup,
+               let prompt = startupPrompts.removeValue(forKey: paneID) {
+                paste(prompt, into: paneID)
+                continue
+            }
+            guard agent.profile.guessesTurns, !runtime.hooked, case .agentWorking = runtime.status,
+                  quiet >= Self.quietTurnEnd, let start = runtime.turnStartedAt,
+                  now.timeIntervalSince(start) >= Self.quietTurnEnd else { continue }
+            handle(HookEvent(pane: paneID.uuidString, source: agent.rawValue, event: AgentEvent.quiet))
+        }
     }
 
     private func apply(_ runtime: PaneRuntime, to paneID: UUID, old: PaneRuntime, session: Session, event: HookEvent?) {
@@ -678,6 +725,8 @@ final class AppState: ObservableObject {
         }
         // Scan ahead so the skill picker opens with its list instead of growing once the scan lands.
         if let agent = new.agent, old.agent != agent || old.cwd != new.cwd { refreshSkills(for: paneID) }
+        // The command that was to start the agent ended, whether the agent ran or not.
+        if let event, event.source == "shell", event.event == "end" { startupPrompts[paneID] = nil }
         if let event, event.source == "shell", event.event == "start", let command = event.cmd {
             ports.scan(after: 1.5)
             history.record(command, cwd: old.cwd)
@@ -710,6 +759,7 @@ final class AppState: ObservableObject {
         switch (event.source, event.event) {
         case ("shell", "start"): text = event.cmd
         case ("claude", "UserPromptSubmit"): text = event.userPrompt
+        case (_, AgentEvent.turnStart): text = event.userPrompt
         case ("codex", "agent-turn-complete"): text = runtime.lastPrompt
         default: text = nil
         }
@@ -875,8 +925,8 @@ final class AppState: ObservableObject {
         if let target = idle, paste(prompt, into: target.id) {
             updateSession(session.id) { $0.focusedPane = target.id }
         } else {
-            guard let command = Self.agentCommand(agent, prompt: prompt, name: "failure") else { return }
-            split(.horizontal, from: paneID, command: command)
+            guard let launch = Self.agentLaunch(agent, prompt: prompt, name: "failure") else { return }
+            split(.horizontal, from: paneID, command: launch.command, typed: launch.typed)
         }
         dismissFailure(paneID)
     }
@@ -893,15 +943,28 @@ final class AppState: ObservableObject {
         return true
     }
 
+    struct AgentLaunch {
+        var command: String
+        /// Typed at the agent's prompt once it's up, for agents that take no task on the command line.
+        var typed: String?
+    }
+
     /// A shell command that starts the agent with a prompt. The prompt goes through a file, so
     /// no quoting of its contents is needed.
-    static func agentCommand(_ agent: AgentKind, prompt: String, name: String) -> String? {
+    static func agentLaunch(_ agent: AgentKind, prompt: String, name: String) -> AgentLaunch? {
+        let program = agent.profile.program
+        let flag: String
+        switch agent.profile.prompt {
+        case .typed: return AgentLaunch(command: program, typed: prompt.trimmingCharacters(in: .whitespacesAndNewlines))
+        case .argument: flag = ""
+        case .flag(let f): flag = f + " "
+        }
         let folder = ShellIntegration.supportDir.appendingPathComponent("prompts", isDirectory: true)
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         let file = folder.appendingPathComponent("\(name)-\(Int(Date().timeIntervalSince1970))-\(WorktreeNaming.randomSuffix()).md")
         guard (try? prompt.write(to: file, atomically: true, encoding: .utf8)) != nil else { return nil }
         let quoted = "'" + file.path.replacingOccurrences(of: "'", with: "'\\''") + "'"
-        return "\(agent.rawValue) \"$(cat \(quoted))\""
+        return AgentLaunch(command: "\(program) \(flag)\"$(cat \(quoted))\"")
     }
 
     // MARK: Turn changes
@@ -1022,8 +1085,8 @@ final class AppState: ObservableObject {
             } else {
                 paste(prompt, into: paneID)
             }
-        } else if let command = Self.agentCommand(.claude, prompt: prompt, name: "review") {
-            split(.horizontal, from: paneID, command: command)
+        } else if let launch = Self.agentLaunch(.claude, prompt: prompt, name: "review") {
+            split(.horizontal, from: paneID, command: launch.command, typed: launch.typed)
         }
         withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
             reviewComments[paneID] = nil
@@ -1145,7 +1208,7 @@ final class AppState: ObservableObject {
         guard let session = selectedSession else { return .calm }
         switch summary(of: session).status {
         case .agentNeedsYou: return .needsYou
-        case .agentWorking(let agent, _): return agent == .claude ? .claude : .codex
+        case .agentWorking(let agent, _): return .agent(agent)
         case .running: return .running
         default: return needsYouCount > 0 ? .needsYou : .calm
         }

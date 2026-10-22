@@ -143,7 +143,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     @objc func toggleHistory(_ sender: Any?) { state.toggleHistory() }
     @objc func findNext(_ sender: Any?) { state.findStep(forward: true) }
     @objc func findPrevious(_ sender: Any?) { state.findStep(forward: false) }
-    @objc func installIntegrations(_ sender: Any?) { IntegrationUI.install() }
+    @objc func installIntegrations(_ sender: Any?) { IntegrationUI.install(installed: state.installedAgents) }
     @objc func checkForUpdates(_ sender: Any?) { state.checkForUpdates(manual: true) }
     @objc func showWhatsNew(_ sender: Any?) { state.showWhatsNew() }
     @objc func uninstallIntegrations(_ sender: Any?) { IntegrationUI.uninstall() }

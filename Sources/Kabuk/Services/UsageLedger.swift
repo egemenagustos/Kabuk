@@ -61,7 +61,7 @@ final class UsageLedger: ObservableObject {
         (0..<count).compactMap { offset in
             guard let date = Calendar.current.date(byAdding: .day, value: -offset, to: Date()) else { return nil }
             let key = UsageBook.day(date)
-            let byAgent = Dictionary(uniqueKeysWithValues: AgentKind.allCases.map { ($0, book.total(on: key, agent: $0.rawValue)) })
+            let byAgent = Dictionary(uniqueKeysWithValues: AgentRegistry.agents.map { ($0, book.total(on: key, agent: $0.rawValue)) })
             return (date, byAgent)
         }
     }

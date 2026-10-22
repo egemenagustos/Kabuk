@@ -96,7 +96,7 @@ struct PaneContainer: View {
             if let worktree {
                 WorktreeChip(worktree: worktree).fixedSize()
             }
-            if let agent = runtime.agent {
+            if let agent = runtime.agent, agent.profile.skillPrefix != nil {
                 SkillsButton(paneID: pane.id, agent: agent)
             }
             TagChip(tag: runtime.tag, agent: runtime.agent)
@@ -266,6 +266,20 @@ private struct FailureChip: View {
                 .foregroundStyle(.white.opacity(0.8))
             ask("Ask Claude", .claude)
             ask("Codex", .codex)
+            let others = state.installedAgents.filter { $0 != .claude && $0 != .codex }
+            if !others.isEmpty {
+                Menu {
+                    ForEach(others, id: \.self) { agent in
+                        Button("Ask \(agent.displayName)") { state.askAgent(about: paneID, agent: agent) }
+                    }
+                } label: {
+                    Image(systemName: "ellipsis").font(.system(size: 10, weight: .semibold)).foregroundStyle(.white.opacity(0.7))
+                }
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
+                .fixedSize()
+                .help("Ask another agent")
+            }
             IconButton(symbol: "xmark", size: 9, help: "Dismiss") { state.dismissFailure(paneID) }
         }
         .padding(.leading, 10)

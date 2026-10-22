@@ -124,7 +124,7 @@ public enum IntegrationInstaller {
     public static let skillText = """
     ---
     name: kabuk-delegate
-    description: Hand a task to Codex or to another Claude that works in parallel in its own git worktree, in a new Kabuk session. Use only when the KABUK_HOOK environment variable is set (Claude runs inside the Kabuk terminal) and the user asks to give work to Codex, to another agent, or to run something in parallel.
+    description: Hand a task to Codex, another Claude, or another coding agent (OpenCode, Gemini, Antigravity, Copilot) that works in parallel in its own git worktree, in a new Kabuk session. Use only when the KABUK_HOOK environment variable is set (Claude runs inside the Kabuk terminal) and the user asks to give work to Codex, to another agent, or to run something in parallel.
     ---
 
     <!-- Written by Kabuk (KABUK_HOOK); removed with Kabuk's integration. -->
@@ -139,7 +139,7 @@ public enum IntegrationInstaller {
     "$KABUK_HOOK" spawn codex --prompt-file /path/to/task.md
     ```
 
-    Use `claude` instead of `codex` for another Claude. The command prints the new worktree's path and branch.
+    Use `claude` instead of `codex` for another Claude, or `opencode`, `gemini`, `antigravity` or `copilot` for those agents, when the user has them. The command prints the new worktree's path and branch; if the agent isn't one Kabuk knows, it lists the ones it does.
 
     - Give the agent everything it needs in the prompt: it doesn't see this conversation.
     - Commit or stash first if the task depends on changes that aren't committed; the worktree starts from HEAD.
@@ -148,13 +148,13 @@ public enum IntegrationInstaller {
 
     """
 
-    private static func hasKabuk(_ hooks: [String: Any]) -> Bool {
+    static func hasKabuk(_ hooks: [String: Any]) -> Bool {
         hooks.values.contains { value in
             (value as? [[String: Any]] ?? []).contains(where: isKabukGroup)
         }
     }
 
-    private static func isKabukGroup(_ group: [String: Any]) -> Bool {
+    static func isKabukGroup(_ group: [String: Any]) -> Bool {
         (group["hooks"] as? [[String: Any]] ?? []).contains { ($0["command"] as? String)?.contains(marker) == true }
     }
 
@@ -233,7 +233,7 @@ public enum IntegrationInstaller {
     // MARK: Helpers
 
     /// Keeps the first original copy; later installs never overwrite it.
-    private static func backup(_ url: URL) {
+    static func backup(_ url: URL) {
         let copy = url.appendingPathExtension("kabuk-backup")
         let fm = FileManager.default
         guard fm.fileExists(atPath: url.path), !fm.fileExists(atPath: copy.path) else { return }

@@ -100,7 +100,7 @@ private struct PlanLimitsChip: View {
     @ObservedObject var ledger: UsageLedger
 
     var body: some View {
-        let agents = AgentKind.allCases.filter { ledger.limits[$0] != nil }
+        let agents = AgentRegistry.agents.filter { ledger.limits[$0] != nil }
         if !agents.isEmpty {
             HoverPopoverButton { showing in
                 // Once a minute, so the current hour moves on and a reset empties the dots while idle.
@@ -268,6 +268,10 @@ private struct CostPopover: View {
         let days = ledger.days(7)
         let today = days.first?.byAgent ?? [:]
         let total = today.values.reduce(0, +)
+        // Claude and Codex always; other agents once they've spent something this week.
+        let agents = AgentRegistry.agents.filter { agent in
+            agent == .claude || agent == .codex || days.contains { ($0.byAgent[agent] ?? 0) > 0 }
+        }
         let peak = days.map { $0.byAgent.values.reduce(0, +) }.max() ?? 0
         VStack(alignment: .leading, spacing: 12) {
             VStack(alignment: .leading, spacing: 7) {
@@ -277,7 +281,7 @@ private struct CostPopover: View {
                     Text(verbatim: Pricing.format(total))
                         .font(.system(size: 12, weight: .semibold).monospacedDigit()).foregroundStyle(.white.opacity(0.9))
                 }
-                ForEach(AgentKind.allCases, id: \.self) { agent in
+                ForEach(agents, id: \.self) { agent in
                     agentRow(agent, today[agent] ?? 0, share: total > 0 ? (today[agent] ?? 0) / total : 0)
                 }
             }
@@ -327,7 +331,7 @@ private struct CostPopover: View {
                 .frame(width: 72, alignment: .leading)
             GeometryReader { proxy in
                 HStack(spacing: 0) {
-                    ForEach(AgentKind.allCases, id: \.self) { agent in
+                    ForEach(AgentRegistry.agents.filter { (byAgent[$0] ?? 0) > 0 }, id: \.self) { agent in
                         Rectangle()
                             .fill(agent.tint)
                             .frame(width: peak > 0 ? proxy.size.width * (byAgent[agent] ?? 0) / peak : 0)
@@ -350,7 +354,7 @@ private struct PlanLimitsPopover: View {
     var body: some View {
         TimelineView(.everyMinute) { context in
             VStack(alignment: .leading, spacing: 12) {
-                ForEach(AgentKind.allCases, id: \.self) { agent in
+                ForEach(AgentRegistry.agents, id: \.self) { agent in
                     if let limits = ledger.limits[agent] {
                         section(agent, limits.current(at: context.date), updated: limits.updatedAt, now: context.date)
                     }
@@ -449,6 +453,6 @@ private struct PlanLimitsPopover: View {
 }
 
 private extension AgentKind {
-    var tint: Color { self == .claude ? Theme.claude : Theme.codex }
-    var glyph: String { self == .claude ? "asterisk" : "chevron.left.forwardslash.chevron.right" }
+    var tint: Color { Theme.color(for: self) }
+    var glyph: String { profile.glyph }
 }

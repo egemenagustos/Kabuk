@@ -188,3 +188,129 @@ final class IntegrationInstallerTests: XCTestCase {
         XCTAssertEqual(try String(contentsOf: IntegrationInstaller.codexConfig, encoding: .utf8), original)
     }
 }
+
+final class AgentIntegrationTests: XCTestCase {
+    var dir: URL!
+
+    override func setUpWithError() throws {
+        dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        IntegrationInstaller.geminiSettings = dir.appendingPathComponent("gemini/settings.json")
+        IntegrationInstaller.copilotHooks = dir.appendingPathComponent("copilot/hooks/kabuk.json")
+        IntegrationInstaller.antigravityHooks = dir.appendingPathComponent("gemini/config/hooks.json")
+        IntegrationInstaller.antigravityScript = dir.appendingPathComponent("gemini/config/kabuk-hook.sh")
+        IntegrationInstaller.opencodePlugin = dir.appendingPathComponent("opencode/plugins/kabuk.js")
+    }
+
+    override func tearDownWithError() throws {
+        try? FileManager.default.removeItem(at: dir)
+    }
+
+    func json(_ url: URL) throws -> [String: Any] {
+        try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as! [String: Any]
+    }
+
+    func testGeminiKeepsUserSettings() throws {
+        try FileManager.default.createDirectory(at: IntegrationInstaller.geminiSettings.deletingLastPathComponent(),
+                                                withIntermediateDirectories: true)
+        try #"{"theme":"Dracula","hooks":{"AfterAgent":[{"hooks":[{"type":"command","command":"say done"}]}]}}"#
+            .write(to: IntegrationInstaller.geminiSettings, atomically: true, encoding: .utf8)
+        try IntegrationInstaller.install(.gemini)
+        try IntegrationInstaller.install(.gemini)
+        XCTAssertTrue(IntegrationInstaller.installed(.gemini))
+        XCTAssertFalse(IntegrationInstaller.outdated(.gemini))
+
+        let settings = try json(IntegrationInstaller.geminiSettings)
+        XCTAssertEqual(settings["theme"] as? String, "Dracula")
+        let hooks = settings["hooks"] as! [String: Any]
+        XCTAssertEqual((hooks["AfterAgent"] as! [[String: Any]]).count, 2, "user hook kept, ours added once")
+        let ours = ((hooks["BeforeAgent"] as! [[String: Any]])[0]["hooks"] as! [[String: Any]])[0]
+        XCTAssertEqual(ours["timeout"] as? Int, 5000)
+        XCTAssertTrue((ours["command"] as! String).contains("gemini BeforeAgent"))
+
+        try IntegrationInstaller.uninstall(.gemini)
+        XCTAssertFalse(IntegrationInstaller.installed(.gemini))
+        XCTAssertEqual(Array((try json(IntegrationInstaller.geminiSettings)["hooks"] as! [String: Any]).keys), ["AfterAgent"])
+    }
+
+    func testCopilotHasAFileOfItsOwn() throws {
+        try IntegrationInstaller.install(.copilot)
+        let file = try json(IntegrationInstaller.copilotHooks)
+        XCTAssertEqual(file["version"] as? Int, 1)
+        let hooks = file["hooks"] as! [String: Any]
+        XCTAssertEqual(Set(hooks.keys), Set(AgentHooks.events[.copilot]!))
+        XCTAssertEqual(((hooks["permissionRequest"] as! [[String: Any]])[0])["timeoutSec"] as? Int, 600)
+        XCTAssertTrue(IntegrationInstaller.installed(.copilot))
+        XCTAssertFalse(IntegrationInstaller.outdated(.copilot))
+        try IntegrationInstaller.uninstall(.copilot)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: IntegrationInstaller.copilotHooks.path))
+    }
+
+    func testUninstallLeavesTheUsersOwnFile() throws {
+        try FileManager.default.createDirectory(at: IntegrationInstaller.opencodePlugin.deletingLastPathComponent(),
+                                                withIntermediateDirectories: true)
+        try "export default {}".write(to: IntegrationInstaller.opencodePlugin, atomically: true, encoding: .utf8)
+        XCTAssertFalse(IntegrationInstaller.installed(.opencode))
+        try IntegrationInstaller.uninstall(.opencode)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: IntegrationInstaller.opencodePlugin.path))
+    }
+
+    func testOpenCodePlugin() throws {
+        try IntegrationInstaller.install(.opencode)
+        XCTAssertTrue(IntegrationInstaller.installed(.opencode))
+        XCTAssertFalse(IntegrationInstaller.outdated(.opencode))
+        let text = try String(contentsOf: IntegrationInstaller.opencodePlugin, encoding: .utf8)
+        XCTAssertTrue(text.contains("export default"))
+        for event in AgentHooks.events[.opencode]! where event != AgentEvent.needsYou {
+            XCTAssertTrue(text.contains("\"\(event)\""), "plugin sends \(event)")
+        }
+        try IntegrationInstaller.uninstall(.opencode)
+        XCTAssertFalse(IntegrationInstaller.installed(.opencode))
+    }
+
+    func testAntigravityKeepsOtherHookSets() throws {
+        try FileManager.default.createDirectory(at: IntegrationInstaller.antigravityHooks.deletingLastPathComponent(),
+                                                withIntermediateDirectories: true)
+        try #"{"logger":{"Stop":[{"type":"command","command":"log"}]}}"#
+            .write(to: IntegrationInstaller.antigravityHooks, atomically: true, encoding: .utf8)
+        try IntegrationInstaller.install(.antigravity)
+        XCTAssertTrue(IntegrationInstaller.installed(.antigravity))
+        XCTAssertFalse(IntegrationInstaller.outdated(.antigravity))
+        let hooks = try json(IntegrationInstaller.antigravityHooks)
+        XCTAssertEqual(Set(hooks.keys), ["logger", "kabuk"])
+        let ours = hooks["kabuk"] as! [String: Any]
+        XCTAssertNotNil(((ours["PostToolUse"] as! [[String: Any]])[0])["matcher"])
+        XCTAssertTrue((((ours["Stop"] as! [[String: Any]])[0])["command"] as! String).hasSuffix("kabuk-hook.sh Stop"))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: IntegrationInstaller.antigravityScript.path))
+
+        try IntegrationInstaller.uninstall(.antigravity)
+        XCTAssertEqual(Array(try json(IntegrationInstaller.antigravityHooks).keys), ["logger"])
+        XCTAssertFalse(FileManager.default.fileExists(atPath: IntegrationInstaller.antigravityScript.path))
+    }
+
+    /// Outside Kabuk the hooks must still print what Gemini and Antigravity read.
+    func testHooksAnswerOutsideKabuk() throws {
+        let gemini = Shell.run("/bin/sh", ["-c", IntegrationInstaller.geminiCommand("AfterAgent")], unsetting: "KABUK_HOOK")
+        XCTAssertEqual(gemini, "{}")
+        try IntegrationInstaller.install(.antigravity)
+        let stop = Shell.run("/bin/sh", [IntegrationInstaller.antigravityScript.path, "Stop"], unsetting: "KABUK_HOOK")
+        XCTAssertEqual(stop, #"{"decision":"stop"}"#)
+    }
+}
+
+private enum Shell {
+    static func run(_ executable: String, _ args: [String], unsetting key: String) -> String {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: executable)
+        process.arguments = args
+        var env = ProcessInfo.processInfo.environment
+        env[key] = nil
+        process.environment = env
+        let out = Pipe()
+        process.standardOutput = out
+        try? process.run()
+        process.waitUntilExit()
+        return String(decoding: out.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+}

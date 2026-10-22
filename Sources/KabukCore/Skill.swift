@@ -45,10 +45,7 @@ public struct Skill: Equatable, Identifiable, Sendable {
 
     /// Typed at the agent's prompt. Claude runs skills as slash commands; Codex mentions them with "$".
     public var insertion: String {
-        switch agent {
-        case .claude: return "/\(invocation) "
-        case .codex: return "$\(invocation) "
-        }
+        "\(agent.profile.skillPrefix ?? "/")\(invocation) "
     }
 
     /// How well a search matches. The name decides; the description only finds a skill whose name
@@ -150,6 +147,8 @@ public enum SkillCatalog {
                 found += skills(in: folder.appendingPathComponent(".codex/skills"), agent: agent, scope: .project, fileManager: fileManager)
             }
             found += skills(in: codex.appendingPathComponent("skills/.system"), agent: agent, scope: .builtIn, fileManager: fileManager)
+        default:
+            return []
         }
 
         var seen: Set<String> = []

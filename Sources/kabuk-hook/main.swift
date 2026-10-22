@@ -3,7 +3,8 @@
 //   kabuk-hook claude <HookEventName>   (hook JSON on stdin)
 //   kabuk-hook claude StatusLine        (status line JSON on stdin; forwards the plan limits)
 //   kabuk-hook codex '<notify json>'
-//   kabuk-hook spawn <claude|codex> [--prompt-file <file> | <prompt…>]
+//   kabuk-hook <gemini|copilot|antigravity|opencode> <hook name>   (hook JSON on stdin)
+//   kabuk-hook spawn <agent> [--prompt-file <file> | <prompt…>]
 //
 // spawn is for agents, not hooks: it asks Kabuk for another agent in a new git worktree,
 // shown under the calling session, and prints the worktree's path and branch.
@@ -22,9 +23,10 @@ let args = CommandLine.arguments
 let spawning = args.count >= 2 && args[1] == "spawn"
 guard let pane = env["KABUK_PANE_ID"], let socketPath = env["KABUK_SOCKET"], args.count >= 3 else {
     if spawning {
-        FileHandle.standardError.write(Data("kabuk-hook spawn only works inside a Kabuk pane. Usage: kabuk-hook spawn <claude|codex> [--prompt-file <file> | <prompt…>]\n".utf8))
+        FileHandle.standardError.write(Data("kabuk-hook spawn only works inside a Kabuk pane. Usage: kabuk-hook spawn <agent> [--prompt-file <file> | <prompt…>]\n".utf8))
         exit(1)
     }
+    if args.count >= 3, let output = AgentHooks.defaultOutput(agent: args[1], hook: args[2]) { print(output) }
     exit(0)
 }
 
@@ -80,6 +82,8 @@ var event: HookEvent
 var suggestions: Any?
 /// Printed for Claude after the event is sent: the Agent call's input with a worktree added.
 var hookOutput: String?
+/// The agent other than Claude whose hook this is, for its permission answer.
+var hookAgent: AgentKind?
 switch args[1] {
 case "claude":
     let stdin = isatty(STDIN_FILENO) == 0 ? FileHandle.standardInput.readDataToEndOfFile() : Data()
@@ -157,6 +161,17 @@ case "codex":
                       prompt: firstLine(inputs?.last),
                       tokens: tokens,
                       session: payload["thread-id"] as? String, limits: limits)
+case "gemini", "copilot", "antigravity", "opencode":
+    guard let agent = AgentKind(rawValue: args[1]) else { exit(0) }
+    let stdin = isatty(STDIN_FILENO) == 0 ? FileHandle.standardInput.readDataToEndOfFile() : Data()
+    let translation = AgentHooks.translate(agent: agent, hook: args[2], payload: json(stdin), pane: pane)
+    hookOutput = translation.output
+    guard let translated = translation.event else {
+        if let hookOutput { print(hookOutput) }
+        exit(0)
+    }
+    event = translated
+    hookAgent = agent
 case "spawn":
     var prompt = args.dropFirst(3).joined(separator: " ")
     if args.count >= 5, args[3] == "--prompt-file" {
@@ -218,6 +233,8 @@ if event.request != nil {
         print("worktree: \(worktree)")
         print("branch: \(answer?.branch ?? "")")
         print("It works on its own; its changes stay in that worktree. Check on them with git -C '\(worktree)' status, log and diff.")
+    } else if let hookAgent {
+        if let output = AgentHooks.permissionOutput(agent: hookAgent, answer?.decision ?? .ask) { print(output) }
     } else if let output = PermissionSummary.hookOutput(answer?.decision ?? .ask, suggestions: suggestions) {
         print(output)
     }
