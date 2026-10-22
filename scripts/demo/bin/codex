@@ -71,6 +71,41 @@ EOF
   stream "Moved the checkout rules into src/checkout/validate.ts so they can be tested on their own; the form now shows one message per field."
 }
 
+# Changes the same lines of server/routes.ts as Claude's rate limiting, for the conflict radar.
+plan_logging() {
+  step "Explored"
+  detail "Read routes.ts"
+  think 1.6 Working $teal
+  step $'Edited \e[1mserver/log.ts\e[0m \e[38;5;114m(+8)\e[0m'
+  cat > server/log.ts <<'EOF'
+import type { RequestHandler } from "express";
+
+/** One line per request: method, path, status and how long it took. */
+export const requestLog: RequestHandler = (req, res, next) => {
+  const start = performance.now();
+  res.on("finish", () => console.log(`${req.method} ${req.path} ${res.statusCode} ${Math.round(performance.now() - start)}ms`));
+  next();
+};
+EOF
+  step $'Edited \e[1mserver/routes.ts\e[0m \e[38;5;114m(+3)\e[0m'
+  cat > server/routes.ts <<'EOF'
+import { Router } from "express";
+import { requestLog } from "./log";
+import { listProducts, getProduct } from "./products";
+import { login, logout } from "./auth";
+
+export const routes = Router();
+
+routes.use(requestLog);
+routes.get("/api/products", listProducts);
+routes.get("/api/products/:id", getProduct);
+routes.post("/api/login", login);
+routes.post("/api/logout", logout);
+EOF
+  print
+  stream "Every API request is now logged with its status and duration."
+}
+
 plan_other() {
   think 1.4 Working $teal
   step $'Edited \e[1mREADME.md\e[0m \e[38;5;114m(+1)\e[0m'
@@ -83,6 +118,7 @@ turn() {
   print
   case ${prompt:l} in
     *checkout*|*valid*) plan_checkout ;;
+    *logging*) plan_logging ;;
     *) plan_other "$prompt" ;;
   esac
   (( total_in += 21000 + RANDOM % 6000, total_cached += 15000 + RANDOM % 4000, total_out += 1200 + RANDOM % 900 ))

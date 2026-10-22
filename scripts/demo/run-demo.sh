@@ -146,6 +146,21 @@ cap "Every agent's state, side by side"
 sleep 5
 shot parallel
 
+# 5b. Conflict radar: Codex changes the lines of server/routes.ts that Claude's rate limiting changed
+k select 0
+sleep 0.8
+cap "Two agents, one file: Kabuk warns before the merge"
+k action newCodexWorktree:
+sleep 3.2
+run "Add request logging to the API routes"
+sleep 6
+shot radar
+k radar show
+sleep 3.5
+shot radardetail
+k radar hide
+sleep 0.8
+
 # 6. Ports
 k select 0
 sleep 0.8
